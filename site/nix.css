@@ -1,0 +1,9 @@
+/* Nix syntax token colours, shared by index.html and source.html. */
+:root { color-scheme: light dark; }
+.tk-comment { color: light-dark(#6a737d, #8b949e); font-style: italic; }
+.tk-string { color: light-dark(#0a7d32, #9ece6a); }
+.tk-path { color: light-dark(#0b6e99, #7dcfff); text-decoration: underline dotted; }
+.tk-keyword { color: light-dark(#a626a4, #bb9af7); font-weight: 600; }
+.tk-constant, .tk-number { color: light-dark(#b45309, #ff9e64); }
+.tk-attr { color: light-dark(#1d4ed8, #7aa2f7); }
+.tk-interp { color: light-dark(#be185d, #f7768e); }

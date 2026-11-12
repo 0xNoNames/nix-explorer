@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Source · Nix module explorer</title>
+<meta name="description" content="Browse and search NixOS, home-manager and nix-darwin module options, with docs and declaration sources.">
+<meta property="og:site_name" content="Nix module explorer">
+<meta property="og:title" content="Source · Nix module explorer">
+<meta property="og:description" content="Browse and search NixOS, home-manager and nix-darwin module options, with docs and declaration sources.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#5277c3">
+<link rel="stylesheet" href="nix.css">
+<!-- Before first paint, so a saved theme doesn't flash. Empty = follow the system. -->
+<script>try { document.documentElement.style.colorScheme = localStorage.theme || ""; } catch {}</script>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+  body { margin: 0; font-family: system-ui, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: .25rem 1rem; align-items: baseline; padding: .5rem 1rem; border-bottom: 1px solid #8884; position: sticky; top: 0; background: Canvas; }
+  header h1 { font-size: 1rem; margin: 0; font-family: ui-monospace, monospace; word-break: break-all; }
+  header .meta { opacity: .7; font-size: .85rem; }
+  pre { margin: 0; padding: .5rem 0; font-size: .85rem; line-height: 1.45; }
+  .line { display: grid; grid-template-columns: 4.5em 1fr; }
+  .line > a { color: GrayText; text-align: right; padding-right: 1em; text-decoration: none; user-select: none; }
+  .line > a:hover { text-decoration: underline; }
+  .line > code { white-space: pre-wrap; word-break: break-all; }
+  .line.hl { background: color-mix(in srgb, #fd0 22%, transparent); }
+  .line.hl > a { color: CanvasText; }
+  main > p { padding: 0 1rem; }
+  @media (max-width: 40rem) { pre { font-size: .75rem; } .line { grid-template-columns: 3.5em 1fr; } .line > a { padding-right: .5em; } }
+</style>
+</head>
+<body>
+<header>
+  <a id="back" href="./">← Explorer</a>
+  <h1 id="path"></h1>
+  <span id="via" class="meta"></span>
+  <span id="channel" class="meta"></span>
+</header>
+<main id="main"><p>Loading…</p></main>
+<script type="module">
+import { IMPORT_DEPTH, esc, findOptionLines, nixImports, nixTokens, optionPath } from "./lib.js";
+
+// URL: source.html?<channel>/<repo>/<path>#L12-L20. Links from the explorer end in #<source>:<option>
+// instead; that is replaced by the declaration's line range once found.
+const $ = (id) => document.getElementById(id);
+let query = "";
+try { query = decodeURIComponent(location.search.slice(1)); } catch { /* malformed: rejected below */ }
+const [channel, ...pathSegs] = query.split("/");
+let path = pathSegs.join("/");
+
+const optionHash = /^#[\w-]+:/.test(location.hash) ? location.hash : "";
+let loc = null;
+try { loc = optionHash && optionPath(decodeURIComponent(optionHash).replace(/^#[\w-]+:/, "")); } catch { /* no jump */ }
+
+$("channel").textContent = channel;
+$("back").href = `./?${channel}${optionHash}`;
+// Came from the explorer in this tab: go back in history, which lands on the option we came from.
+$("back").addEventListener("click", (e) => {
+  const ref = document.referrer && new URL(document.referrer);
+  if (ref && ref.origin === location.origin && !ref.pathname.endsWith("source.html") && history.length > 1) {
+    e.preventDefault();
+    history.back();
+  }
+});
+
+const main = $("main");
+const fail = (msg) => main.replaceChildren(Object.assign(document.createElement("p"), { textContent: msg }));
+const fetchSrc = async (p) => {
+  const res = await fetch("src/" + [channel, ...p.split("/")].map(encodeURIComponent).join("/"));
+  return res.ok ? res.text() : null;
+};
+
+// Only plain relative paths into the bundled src/<channel>/ tree.
+if (!/^[\w.-]+$/.test(channel) || !path || [channel, ...pathSegs].some((s) => !s || s === "." || s === "..")) fail("Invalid source path.");
+else {
+  const declared = path;
+  let text = await fetchSrc(path);
+  if (text === null) fail("This file is not bundled with the explorer.");
+  else {
+    let range = loc?.length ? findOptionLines(text, loc) : null;
+    // Submodule options are often declared in a file the declaring module imports (nginx vhost-options.nix).
+    if (loc?.length && !range) [path, text, range] = (await searchImports(path, text)) ?? [path, text, null];
+    if (path !== declared) $("via").textContent = `imported from ${declared.split("/").pop()}`;
+    const lines = range ? (range[0] === range[1] ? `#L${range[0]}` : `#L${range[0]}-L${range[1]}`) : "";
+    // replaceState: no extra history entry, so browser back returns to the explorer.
+    history.replaceState(null, "", `?${channel}/${path}${optionHash ? lines : location.hash}`);
+    render(text);
+  }
+}
+
+// Breadth-first through relative imports (same depth the build bundles); returns [path, text, range] or null.
+async function searchImports(start, text) {
+  const seen = new Set([start]);
+  let frontier = [[start, text]];
+  for (let depth = 0; depth < IMPORT_DEPTH && frontier.length; depth++) {
+    const refs = frontier.flatMap(([f, t]) => nixImports(t, f)).filter((r) => !seen.has(r) && seen.add(r));
+    frontier = (await Promise.all(refs.map(async (r) => [r, await fetchSrc(r)]))).filter(([, t]) => t !== null);
+    for (const [r, t] of frontier) {
+      const range = findOptionLines(t, loc);
+      if (range) return [r, t, range];
+    }
+  }
+  return null;
+}
+
+function render(text) {
+  $("path").textContent = path;
+  document.title = `${path.split("/").pop()} · Nix module explorer`;
+  // Split highlighted tokens into lines so multi-line strings/comments keep their colour per line.
+  const lines = [""];
+  for (const [cls, t] of nixTokens(text))
+    t.split("\n").forEach((part, i) => {
+      if (i) lines.push("");
+      if (part) lines[lines.length - 1] += cls ? `<span class="tk-${cls}">${esc(part)}</span>` : esc(part);
+    });
+  if (lines.length > 1 && lines.at(-1) === "") lines.pop(); // trailing newline
+  const pre = document.createElement("pre");
+  pre.innerHTML = lines.map((l, i) => `<div class="line" id="L${i + 1}"><a href="#L${i + 1}">${i + 1}</a><code>${l}</code></div>`).join("");
+  // Line links replace the hash instead of pushing history, so back still returns to the explorer.
+  pre.addEventListener("click", (e) => {
+    const a = e.target.closest(".line > a");
+    if (!a) return;
+    e.preventDefault();
+    history.replaceState(null, "", a.getAttribute("href"));
+    highlight();
+  });
+  main.replaceChildren(pre);
+  highlight();
+}
+
+// Highlight "#L12" or "#L12-L20" and bring it into view.
+function highlight() {
+  for (const el of document.querySelectorAll(".line.hl")) el.classList.remove("hl");
+  const m = location.hash.match(/^#L(\d+)(?:-L(\d+))?$/);
+  if (!m) return;
+  const [a, b] = [+m[1], +(m[2] ?? m[1])].sort((x, y) => x - y);
+  const end = Math.min(b, document.querySelectorAll(".line").length); // a hand-typed #L1-L99999999999 must not hang
+  for (let i = a; i <= end; i++) $(`L${i}`)?.classList.add("hl");
+  $(`L${a}`)?.scrollIntoView({ block: b - a > 25 ? "start" : "center" });
+}
+addEventListener("hashchange", highlight);
+</script>
+</body>
+</html>
