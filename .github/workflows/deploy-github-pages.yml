@@ -1,0 +1,79 @@
+name: Deploy to GitHub pages
+
+on:
+  push:
+    branches: "main"
+  schedule:
+    # Off the hour: runs scheduled at :00 are the most often delayed or dropped.
+    - cron: "17 6 * * *"
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# Each job gets only what it needs (below).
+permissions:
+  contents: read
+
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # Build job
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write # to commit the updated channels.json
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+      - uses: cachix/cachix-action@v17
+        with:
+          name: nix-explorer
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+      - name: Build with Nix
+        run: |
+          nix run --verbose .#update-channels
+          git add -N channels.json
+          nix build --print-build-logs .#site
+      - name: Stage the site
+        # `result` points into the store, which is read-only and full of
+        # symlinks; the upload action wants a plain writable directory.
+        run: |
+          cp -rL result _site
+          chmod -R u+w _site
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+      - name: Commit updated channels
+        # Last, so only pins that built get committed. The commit also counts as repo
+        # activity, which keeps GitHub from disabling the schedule after 60 days.
+        # Pushes made with GITHUB_TOKEN don't trigger workflows, so this doesn't loop.
+        run: |
+          git diff --quiet channels.json && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update channels" channels.json
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+  # Deployment job
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
