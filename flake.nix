@@ -20,13 +20,17 @@
       # Primary channels from NixOS/infra's channels.nix, pinned by the update-channels app.
       # The UI defaults to the first "stable" entry, else the first. Fetches are locked (rev + narHash), so eval stays pure.
       fetch = s: builtins.fetchTree { type = "github"; inherit (s) owner repo rev narHash; };
-      channels = map (c: {
-        inherit (c) name status;
-        revs = { nixos = c.nixpkgs.rev; home-manager = c.home-manager.rev; darwin = c.nix-darwin.rev; };
-        nixpkgs = fetch c.nixpkgs;
-        hm = fetch c.home-manager;
-        darwin = fetch c.nix-darwin;
-      }) (lib.importJSON ./channels.json);
+      channels = map (
+        c:
+        assert builtins.match "nixos-(unstable|[0-9]{2}\\.[0-9]{2})" c.name != null;
+        {
+          inherit (c) name status;
+          revs = { nixos = c.nixpkgs.rev; home-manager = c.home-manager.rev; darwin = c.nix-darwin.rev; };
+          nixpkgs = fetch c.nixpkgs;
+          hm = fetch c.home-manager;
+          darwin = fetch c.nix-darwin;
+        }
+      ) (lib.importJSON ./channels.json);
 
       channelOptions =
         system: pkgs: c:
@@ -134,15 +138,15 @@
                     options = channelOptions system pkgs c;
                   in
                   ''
-                    cp -r ${options} $out/data/${c.name}
-                    cp -r ${channelSources pkgs c options} $out/src/${c.name}
+                    cp -r ${options} "$out/data/"${lib.escapeShellArg c.name}
+                    cp -r ${channelSources pkgs c options} "$out/src/"${lib.escapeShellArg c.name}
                   ''
                 ) channels}
                 # Decoded sizes of the data files, for the loading percentage: a compressing host
                 # (GitHub Pages) only sends the compressed Content-Length.
                 cp $channelsJSONPath channels.json
                 ${lib.concatMapStrings (c: lib.concatMapStrings (s: ''
-                  jq --arg c ${c.name} --arg s ${s} --argjson n "$(wc -c < $out/data/${c.name}/${s}.json)" \
+                  jq --arg c ${lib.escapeShellArg c.name} --arg s ${lib.escapeShellArg s} --argjson n "$(wc -c < "$out/data/"${lib.escapeShellArg c.name}/${lib.escapeShellArg s}.json)" \
                     'map(if .name == $c then .sizes[$s] = $n else . end)' channels.json > tmp.json
                   mv tmp.json channels.json
                 '') [ "nixos" "home-manager" "darwin" ]) channels}
@@ -211,6 +215,13 @@
                 nix eval --json --file "$tmp/channels.nix" channels \
                   --apply 'cs: builtins.mapAttrs (_: c: c.status) (builtins.removeAttrs cs (builtins.filter (n: (cs.''${n}.variant or null) != "primary") (builtins.attrNames cs)))' \
                   > "$tmp/primary.json"
+
+                # These names become channel paths and are interpolated into the Nix build script.
+                # Reject unexpected upstream keys before any pinning or output generation.
+                if ! jq -e 'all(keys[]; test("^nixos-(unstable|[0-9]{2}\\.[0-9]{2})$"))' "$tmp/primary.json" >/dev/null; then
+                  echo "unexpected channel name in upstream channels.nix" >&2
+                  exit 1
+                fi
 
                 # rev <owner> <repo> <branch>: prints the branch's commit, or nothing if the branch doesn't exist.
                 # A failing ls-remote (network, rate limit) aborts the run rather than dropping the channel.
