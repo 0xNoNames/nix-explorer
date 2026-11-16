@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Static web explorer for NixOS, home-manager and nix-darwin module options, built to be **deployed in isolated environments**: no request may leave the site (vendored JS, bundled sources, no GitHub links), browsed as a tree of option paths (`nixos/{_module,appstream,boot,…}`), with fuzzy search and rendered Markdown docs. Built entirely with a Nix flake; no JS build step or npm (the build only minifies HTML/JS/CSS/SVG with `minify`, from nixpkgs). The only third-party JS is `marked`, vendored as one pinned file via `fetchurl` in `flake.nix`.
+Static web explorer for NixOS, home-manager and nix-darwin module options, built to be **deployed in isolated environments**: no request may leave the site (vendored JS, bundled sources, no GitHub links), browsed as a tree of option paths (`nixos/{_module,appstream,boot,…}`), with fuzzy search and rendered Markdown docs. Built entirely with a Nix flake; no JS build step or npm (the build only minifies HTML/JS/CSS/SVG with `minify`, from nixpkgs). The only third-party JS is `marked`, vendored as one file, `site/marked.js` (v18.2.0 ESM build, unmodified).
 
 ## Commands
 

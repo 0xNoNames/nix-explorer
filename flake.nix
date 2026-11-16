@@ -107,12 +107,6 @@
     {
       packages = forAll (
         system: pkgs: rec {
-          # Vendored as one pinned ESM file: no npm or JS build step.
-          marked = pkgs.fetchurl {
-            url = "https://cdn.jsdelivr.net/npm/marked@18.2.0/lib/marked.esm.js";
-            hash = "sha256-FiGU6pAqnW7KYBG7QrVzKZHKZQ4BfQN1t29CBIEMbBQ=";
-          };
-
           site =
             pkgs.runCommand "nixos-explorer-site"
               {
@@ -125,7 +119,6 @@
                 cp ${./site}/*.html ${./site}/*.js ${./site}/*.css web/
                 # The Nix snowflake (NixOS artwork, CC-BY-4.0).
                 cp ${pkgs.nixos-icons}/share/icons/hicolor/scalable/apps/nix-snowflake.svg web/favicon.svg
-                cp ${marked} web/marked.js
                 # Minifies HTML (inline scripts and styles too), JS, CSS and SVG; data JSON is left as-is (gzip already removes its whitespace).
                 minify -r -o $out/ web/
                 ${lib.concatMapStrings (
