@@ -94,7 +94,7 @@
 <body>
 <header>
   <label>Channel <select id="channel"></select></label>
-  <input id="search" type="search" placeholder="Fuzzy search options…" aria-label="Fuzzy search options">
+  <input id="search" type="search" placeholder="Fuzzy search options… (@nixos @home @darwin)" aria-label="Fuzzy search options">
   <!-- Inline SVG: the icon itself makes no request (offline site); only clicking leaves it. -->
   <div class="end">
   <button id="theme" class="repo" type="button" title="Toggle dark/light theme" aria-label="Toggle dark/light theme"><svg id="sun" width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06"/></svg><svg id="moon" width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6.2 1.2a6.5 6.5 0 1 0 8.6 8.6A5.5 5.5 0 0 1 6.2 1.2z"/></svg></button>
@@ -108,7 +108,7 @@
 </main>
 <script type="module">
 import { marked } from "./marked.js";
-import { buildTree, countOptions, esc, fuzzyScore, nixHTML, optionName, optionPath, preprocessMd } from "./lib.js";
+import { buildTree, countOptions, esc, fuzzyScore, nixHTML, optionName, optionPath, parseSearch, preprocessMd } from "./lib.js";
 
 const SOURCES = ["nixos", "home-manager", "darwin"];
 const $ = (id) => document.getElementById(id);
@@ -279,10 +279,13 @@ function renderOption(o) {
 }
 
 function search() {
-  const q = $("search").value.toLowerCase().replace(/\s+/g, "");
+  const { q, sources } = parseSearch($("search").value, SOURCES);
   if (!q) return route(); // cleared: back to what the URL shows
   const hits = [];
-  for (const o of allOptions) { const s = fuzzyScore(q, o.key); if (s >= 0) hits.push([s, o]); }
+  for (const o of allOptions) {
+    if (sources && !sources.includes(o.source)) continue;
+    const s = fuzzyScore(q, o.key); if (s >= 0) hits.push([s, o]);
+  }
   hits.sort((a, b) => b[0] - a[0]);
   const clear = h("a", { href: "", className: "clear" }, "clear");
   clear.addEventListener("click", (e) => { e.preventDefault(); $("search").value = ""; search(); });

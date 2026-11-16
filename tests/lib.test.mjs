@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MODULAR_ROOT, buildTree, countOptions, findOptionLines, fuzzyScore, nixImports, nixTokens, normalizeDecl, optionName, optionPath, preprocessMd } from "../site/lib.js";
+import { MODULAR_ROOT, buildTree, countOptions, findOptionLines, fuzzyScore, nixImports, nixTokens, normalizeDecl, optionName, optionPath, parseSearch, preprocessMd } from "../site/lib.js";
 
 test("normalizeDecl handles both declaration formats", () => {
   assert.equal(normalizeDecl("nixos/modules/a.nix"), "nixpkgs/nixos/modules/a.nix");
@@ -172,4 +172,13 @@ test("optionName/optionPath round-trip dotted, quoted and placeholder segments",
     assert.deepEqual(optionPath(name), segs);
   }
   assert.deepEqual(optionPath(""), []);
+});
+
+test("parseSearch pulls @source filters out of the query", () => {
+  const S = ["nixos", "home-manager", "darwin"];
+  assert.deepEqual(parseSearch("Nginx enable", S), { q: "nginxenable", sources: null });
+  assert.deepEqual(parseSearch("@nixos nginx", S), { q: "nginx", sources: ["nixos"] });
+  assert.deepEqual(parseSearch("git @home @d", S), { q: "git", sources: ["home-manager", "darwin"] });
+  assert.deepEqual(parseSearch("git @", S), { q: "git", sources: null });
+  assert.deepEqual(parseSearch("git @nope", S), { q: "git", sources: [] });
 });

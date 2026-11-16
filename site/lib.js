@@ -70,6 +70,17 @@ export function fuzzyScore(q, s) {
   return score + (s.includes(q) ? 30 : 0) - s.length * 0.1;
 }
 
+// Splits a search box value into the fuzzy query and the sources picked with `@<prefix>` words
+// (`@nixos`, `@home`, `@d`; several = any of them). sources is null when none is given.
+export function parseSearch(value, sources) {
+  let picks = null; // a bare "@" (still typing) filters nothing; an unknown @word matches nothing
+  const q = value.toLowerCase().replace(/@(\S*)/g, (_, p) => {
+    if (p) (picks ??= []).push(...sources.filter((s) => s.startsWith(p)));
+    return "";
+  }).replace(/\s+/g, "");
+  return { q, sources: picks };
+}
+
 // Minimal Nix tokenizer for highlighting: returns [[class | null, text], …] covering all of src.
 // Strings are scanned with a context stack so ${…} interpolations (which may hold nested strings) are code.
 const NIX_CODE = new RegExp([
