@@ -13,8 +13,8 @@
       "owner": "nix-community",
       "repo": "home-manager",
       "branch": "master",
-      "rev": "5b76c5b8eec25fdbce4f43309b3ee10584374a26",
-      "narHash": "sha256-hMI9Xg+lxS8kbnxIxL/jPQn688dstoxQAcMEbCb1ax0="
+      "rev": "4246683484a7b4ced0a0d880974b67137f092289",
+      "narHash": "sha256-sTnTYa/VMHpUWVYb+GNY2xvlUkLpXzTJ8WCT3AAQ+hI="
     },
     "nix-darwin": {
       "owner": "nix-darwin",
@@ -38,8 +38,8 @@
       "owner": "nix-community",
       "repo": "home-manager",
       "branch": "release-26.05",
-      "rev": "6eb2d33d1d0c95a37ef6443c88e6c1686012ee8b",
-      "narHash": "sha256-R2sZBXiOJo3HAnvTiVkbbHDJy//JMlAwUKEiPbfqPXk="
+      "rev": "5643e73425b85ac359ba2aaf83deae8ce1cd7968",
+      "narHash": "sha256-Qkh6uNyMsic61gfyOO8VXnC+HEBdti6Xe2kKiMf66O0="
     },
     "nix-darwin": {
       "owner": "nix-darwin",
