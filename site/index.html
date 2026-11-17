@@ -34,7 +34,7 @@
   /* Details of the previous channel while the next one loads. */
   #detail.stale { opacity: .4; pointer-events: none; }
   nav { font-size: .9rem; font-family: ui-monospace, monospace; }
-  details > :not(summary) { margin-left: 1rem; }
+  nav details > :not(summary) { margin-left: 1rem; }
   /* Depth colours (cycle of 6), shared by tree names, indent guides and title segments. */
   .c0 { --c: light-dark(hsl(210 70% 40%), hsl(210 85% 72%)); }
   .c1 { --c: light-dark(hsl(145 60% 30%), hsl(145 55% 62%)); }
@@ -45,7 +45,7 @@
   .name { color: var(--c); }
   .md pre, dd pre { background: #8881; padding: .4rem .6rem; border-radius: .3rem; }
   /* Indent guides: each open folder draws a line in its own colour alongside its children. */
-  details[open] { --g: color-mix(in srgb, var(--c) 60%, transparent);
+  nav details[open] { --g: color-mix(in srgb, var(--c) 60%, transparent);
     background: linear-gradient(var(--g), var(--g)) no-repeat .3rem 1.3em / 2px calc(100% - 1.3em); }
   summary, .leaf { cursor: pointer; padding: 1px 0; white-space: nowrap; }
   .leaf { display: block; color: inherit; text-decoration: none; }
@@ -71,6 +71,7 @@
   .md blockquote { margin: .5rem 0; padding: .1rem .75rem; border-left: 3px solid #d90; background: #d901; }
   pre { white-space: pre-wrap; margin: .25rem 0; font-size: .85rem; }
   code { font-size: .85em; }
+  .info > summary { font-size: .85rem; opacity: .7; margin-top: .4rem; width: max-content; }
   dl { display: grid; grid-template-columns: max-content 1fr; gap: .2rem .75rem; margin: .5rem 0 0; font-size: .85rem; }
   dt { opacity: .7; }
   dd { margin: 0; min-width: 0; }
@@ -268,14 +269,14 @@ function renderOption(o) {
   return h("article", {},
     h("h3", {}, ...crumbs([o.source, ...o.loc])),
     o.description ? md(o.description, o.source) : null,
-    h("dl", {},
+    h("details", { className: "info" }, h("summary", {}, "Details"), h("dl", {},
       ...row("Usage", o.modular ? nixCode(modularUsage(o)) : null),
       ...row("Type", o.type),
       ...row("Default", literal(o.default, o.source)),
       ...row("Example", literal(o.example, o.source)),
       ...row("Read-only", o.readOnly ? "yes" : null),
       ...row("Declared in", o.decls.length ? h("ul", {}, ...o.decls.map((d) =>
-        h("li", {}, h("a", { href: `source.html?${channelName}/${d}#${o.source}:${o.name}` }, d)))) : null)));
+        h("li", {}, h("a", { href: `source.html?${channelName}/${d}#${o.source}:${o.name}` }, d)))) : null))));
 }
 
 function search() {
