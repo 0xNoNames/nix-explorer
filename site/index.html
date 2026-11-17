@@ -171,7 +171,7 @@ async function load(channel) {
   if (seq !== loading) return;
   root = buildTree(Object.fromEntries(SOURCES.map((s, i) => [s, data[i]])));
   channelName = channel.name;
-  revs = channel.revs;
+  revs = { nixos: channel.nixpkgs.rev, "home-manager": channel["home-manager"].rev, darwin: channel["nix-darwin"].rev };
   allOptions = SOURCES.flatMap((s) => collect(root.children[s]));
   for (const o of allOptions) o.key = o.name.toLowerCase();
   byKey = new Map(allOptions.map((o) => [`${o.source}:${o.name}`, o]));

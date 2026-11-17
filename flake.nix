@@ -22,7 +22,6 @@
       fetch = s: builtins.fetchTree { type = "github"; inherit (s) owner repo rev narHash; };
       channels = map (c: {
         inherit (c) name status;
-        revs = { nixos = c.nixpkgs.rev; home-manager = c.home-manager.rev; darwin = c.nix-darwin.rev; };
         nixpkgs = fetch c.nixpkgs;
         hm = fetch c.home-manager;
         darwin = fetch c.nix-darwin;
@@ -110,8 +109,6 @@
           site =
             pkgs.runCommand "nixos-explorer-site"
               {
-                channelsJSON = builtins.toJSON (map (c: { inherit (c) name status revs; }) channels);
-                passAsFile = [ "channelsJSON" ];
                 nativeBuildInputs = [ pkgs.jq pkgs.minify ];
               }
               ''
@@ -133,7 +130,7 @@
                 ) channels}
                 # Decoded sizes of the data files, for the loading percentage: a compressing host
                 # (GitHub Pages) only sends the compressed Content-Length.
-                cp $channelsJSONPath channels.json
+                cp ${./channels.json} channels.json
                 ${lib.concatMapStrings (c: lib.concatMapStrings (s: ''
                   jq --arg c ${c.name} --arg s ${s} --argjson n "$(wc -c < $out/data/${c.name}/${s}.json)" \
                     'map(if .name == $c then .sizes[$s] = $n else . end)' channels.json > tmp.json

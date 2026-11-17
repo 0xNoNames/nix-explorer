@@ -13,8 +13,8 @@
       "owner": "nix-community",
       "repo": "home-manager",
       "branch": "master",
-      "rev": "a1293da7dd8e497e08d26173f97e2976b36a31ea",
-      "narHash": "sha256-awkBBs5ctFKgEYjpNGpi3t/VqF589n5EWfdinRb2gNI="
+      "rev": "5b76c5b8eec25fdbce4f43309b3ee10584374a26",
+      "narHash": "sha256-hMI9Xg+lxS8kbnxIxL/jPQn688dstoxQAcMEbCb1ax0="
     },
     "nix-darwin": {
       "owner": "nix-darwin",
