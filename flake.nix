@@ -139,40 +139,7 @@
                 cp channels.json $out/data/channels.json
               '';
 
-          default = pkgs.writeShellScriptBin "nixos-explorer" ''
-            port=''${PORT:-8000}
-            tmp=$(mktemp -d)
-            trap 'rm -rf "$tmp"' EXIT
-            # nginx writes its pid and temp files under the prefix, so give it a scratch one.
-            cat > "$tmp/nginx.conf" <<EOF
-            daemon off;
-            pid $tmp/nginx.pid;
-            error_log stderr;
-            events {}
-            http {
-              include ${pkgs.nginx}/conf/mime.types;
-              default_type text/plain;
-              access_log /dev/stdout;
-              gzip on;
-              gzip_comp_level 6;
-              gzip_types application/json application/javascript text/css image/svg+xml;
-              client_body_temp_path $tmp/body;
-              proxy_temp_path $tmp/proxy;
-              fastcgi_temp_path $tmp/fastcgi;
-              uwsgi_temp_path $tmp/uwsgi;
-              scgi_temp_path $tmp/scgi;
-              server {
-                listen 127.0.0.1:$port;
-                root ${site};
-                # no-store: store files all have mtime 1970, so Last-Modified revalidation would serve stale builds.
-                add_header Cache-Control no-store always;
-                etag off;
-              }
-            }
-            EOF
-            echo "Serving on http://localhost:$port"
-            ${lib.getExe pkgs.nginx} -p "$tmp" -e stderr -c "$tmp/nginx.conf"
-          '';
+          default = site;
         }
       );
 

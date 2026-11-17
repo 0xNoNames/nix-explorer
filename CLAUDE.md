@@ -6,7 +6,6 @@ Static web explorer for NixOS, home-manager and nix-darwin module options, built
 
 ## Commands
 
-- `nix run .` — build everything and serve with nginx on http://localhost:8000 (bound to 127.0.0.1 only) (`PORT=…` to change)
 - `nix build .#site` — static site in `./result` (deployable as-is)
 - `node --test tests/lib.test.mjs` — unit tests (also `nix build .#checks.<system>.lib`)
 - `nix develop` — shell with node (for the unit tests)
@@ -39,4 +38,3 @@ The flake only sees git-tracked files: `git add` (or `git add -N`) new files bef
   - Source: `source.html?<channel>/<repo>/<path>#L12-L20`. Explorer links end in `#<source>:<option name>` instead; the page swaps that for the found line range with `replaceState`. Line-number clicks also use `replaceState`, so the history stays explorer → source and "← Explorer" can use `history.back()` when the referrer is the explorer. Otherwise it links to `./?<channel>#<option>`.
 - **Syntax highlighting**: `nixTokens` in `lib.js` is a small scanner (no library) with a context stack, so `${…}` interpolations inside strings are tokenized as code. That matters because nixpkgs nests `''…${ f ''…'' }…''`. It's used for `literalExpression` defaults/examples, ` ```nix ` blocks in descriptions (marked `code` renderer; other languages stay plain), the modular-services usage snippet and `source.html`. `nixHTML` escapes every token before it goes into `innerHTML`. `source.html` splits tokens into lines after tokenizing, so multi-line strings keep their colour.
 - `site/lib.js` is pure logic (tree, decls, markdown preprocessing, fuzzy scoring, Nix tokenizer), tested with node. `site/index.html` holds the DOM code inline. Tree nodes render lazily on first open (~33k options).
-- `nix run` serves with nginx (generated config in a temp prefix), gzip on, and `Cache-Control: no-store` on purpose: store files all have mtime 1970, so `Last-Modified` revalidation would keep serving stale builds.
