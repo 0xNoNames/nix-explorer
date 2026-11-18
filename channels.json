@@ -6,15 +6,15 @@
       "owner": "NixOS",
       "repo": "nixpkgs",
       "branch": "nixos-unstable",
-      "rev": "d5cc6833999746cffdfe0598f7bc801a57b887a9",
-      "narHash": "sha256-Wpz/7x/YWnDIBu7yj6ixe8j6fIMsidd9Y+o1PqPF3iM="
+      "rev": "04906337b6d53e8bb0eaf0470ae9f070a4d4eb55",
+      "narHash": "sha256-lME2lHoDHAaSHP3/okgiVoJ0icVEvsQH8LeU3We7tcc="
     },
     "home-manager": {
       "owner": "nix-community",
       "repo": "home-manager",
       "branch": "master",
-      "rev": "4246683484a7b4ced0a0d880974b67137f092289",
-      "narHash": "sha256-sTnTYa/VMHpUWVYb+GNY2xvlUkLpXzTJ8WCT3AAQ+hI="
+      "rev": "2b13c9cb3aa20653e6f8ee0b7f8331a53ea9b0a9",
+      "narHash": "sha256-+CPrP74GDJ63f7bgEFC9Av4hbxc7K9WUNv1ZVRifRe8="
     },
     "nix-darwin": {
       "owner": "nix-darwin",
