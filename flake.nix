@@ -222,6 +222,7 @@
                 echo "wrote $out: $(jq -r 'map(.name) | join(", ")' "$out")" >&2
               '';
             });
+            meta.description = "Re-pin channels.json from NixOS/infra channels.nix";
           };
         }
       );
