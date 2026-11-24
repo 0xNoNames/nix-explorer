@@ -30,6 +30,12 @@
   #suggest { position: absolute; top: 100%; left: 0; right: 0; z-index: 1; margin: .2rem 0 0; padding: .2rem 0; list-style: none;
     background: Canvas; border: 1px solid #8886; border-radius: .3rem; font: .9rem ui-monospace, monospace; }
   #suggest li { padding: .2rem .5rem; cursor: pointer; }
+  /* "Channel" sits inside the select's box: the label draws the border, the select has none. */
+  .channel { justify-self: start; display: inline-flex; align-items: center; gap: .25rem; padding-left: .5rem;
+    border: 1px solid #8886; border-radius: .3rem; font-size: .85rem; color: color-mix(in srgb, CanvasText 70%, transparent); }
+  .channel select { border: 0; background: none; color: CanvasText; font: inherit; padding: .2rem .3rem; cursor: pointer; }
+  .channel:focus-within { outline: 2px solid Highlight; outline-offset: 1px; }
+  .channel select:focus { outline: none; }
   #suggest li:hover, #suggest [aria-selected="true"] { background: #8883; }
   .end { justify-self: end; display: flex; align-items: center; gap: .75rem; }
   .repo { display: flex; color: inherit; opacity: .7; }
@@ -123,7 +129,7 @@
 </head>
 <body>
 <header>
-  <label>Channel <select id="channel"></select></label>
+  <label class="channel">Channel <select id="channel"></select></label>
   <span class="searchbox"><input id="search" type="search" placeholder="Fuzzy search options… (@nixos @home @darwin)" aria-label="Fuzzy search options" role="combobox" aria-autocomplete="list" aria-controls="suggest" aria-expanded="false" autocomplete="off"><button id="clear" type="button" title="Clear search" aria-label="Clear search"><svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg></button><ul id="suggest" role="listbox" aria-label="Sources" hidden></ul></span>
   <!-- Inline SVG: the icon itself makes no request (offline site); only clicking leaves it. -->
   <div class="end">
@@ -163,6 +169,8 @@ const literal = (v, source) =>
   : v._type === "literalExpression" ? nixCode(v.text)
   : h("pre", {}, h("code", {}, JSON.stringify(v, null, 2)));
 
+// Channels are named without "nixos-" in the UI and URLs (26.05, unstable); data paths keep the full name.
+const short = (name) => name.replace(/^nixos-/, "");
 let root, channelName, revs, allOptions = [], byKey = new Map(), current;
 const els = new WeakMap(); // tree node -> its <details> or leaf <a>
 
@@ -200,7 +208,7 @@ async function load(channel) {
   }
   if (seq !== loading) return;
   root = buildTree(Object.fromEntries(SOURCES.map((s, i) => [s, data[i]])));
-  channelName = channel.name;
+  channelName = short(channel.name);
   revs = { nixos: channel.nixpkgs.rev, "home-manager": channel["home-manager"].rev, darwin: channel["nix-darwin"].rev };
   allOptions = SOURCES.flatMap((s) => collect(root.children[s]));
   for (const o of allOptions) o.key = o.name.toLowerCase();
@@ -444,11 +452,11 @@ $("split").addEventListener("keydown", (e) => {
 addEventListener("hashchange", () => { $("search").value = ""; route(); });
 
 const channels = await fetch("data/channels.json").then((r) => r.json());
-$("channel").append(...channels.map((c, i) => h("option", { value: i }, `${c.name} (${c.status})`)));
-// Channel is the whole query string (?nixos-26.05) so shared links keep it; in-page #links preserve it.
+$("channel").append(...channels.map((c, i) => h("option", { value: i }, `${short(c.name)} (${c.status})`)));
+// Channel is the whole query string (?26.05) so shared links keep it; in-page #links preserve it.
 function selectChannel(i) {
   $("channel").value = i;
-  history.replaceState(null, "", `?${channels[i].name}${location.hash}`);
+  history.replaceState(null, "", `?${short(channels[i].name)}${location.hash}`);
   load(channels[i]);
 }
 $("channel").addEventListener("change", (e) => selectChannel(+e.target.value));
@@ -456,7 +464,7 @@ let wanted = "";
 try { wanted = decodeURIComponent(location.search.slice(1)); } catch { /* malformed: default channel */ }
 // Default: the newest stable release (channels are newest first), else the first channel.
 const fallback = Math.max(0, channels.findIndex((c) => c.status === "stable"));
-const asked = channels.findIndex((c) => c.name === wanted);
+const asked = channels.findIndex((c) => short(c.name) === short(wanted)); // old ?nixos-26.05 links still work
 selectChannel(asked >= 0 ? asked : fallback);
 </script>
 </body>

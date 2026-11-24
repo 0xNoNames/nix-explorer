@@ -46,7 +46,9 @@ import { IMPORT_DEPTH, esc, findOptionLines, nixImports, nixTokens, optionPath }
 const $ = (id) => document.getElementById(id);
 let query = "";
 try { query = decodeURIComponent(location.search.slice(1)); } catch { /* malformed: rejected below */ }
-const [channel, ...pathSegs] = query.split("/");
+const [rawChannel, ...pathSegs] = query.split("/");
+// URLs name the channel without "nixos-" (26.05); old full names still work. Files live under src/nixos-<channel>/.
+const channel = rawChannel.replace(/^nixos-/, "");
 let path = pathSegs.join("/");
 
 const optionHash = /^#[\w-]+:/.test(location.hash) ? location.hash : "";
@@ -67,12 +69,12 @@ $("back").addEventListener("click", (e) => {
 const main = $("main");
 const fail = (msg) => main.replaceChildren(Object.assign(document.createElement("p"), { textContent: msg }));
 const fetchSrc = async (p) => {
-  const res = await fetch("src/" + [channel, ...p.split("/")].map(encodeURIComponent).join("/"));
+  const res = await fetch("src/" + [`nixos-${channel}`, ...p.split("/")].map(encodeURIComponent).join("/"));
   return res.ok ? res.text() : null;
 };
 
 // Only plain relative paths into the bundled src/<channel>/ tree.
-if (!/^[\w.-]+$/.test(channel) || !path || [channel, ...pathSegs].some((s) => !s || s === "." || s === "..")) fail("Invalid source path.");
+if (!/^[\w.-]+$/.test(channel) || !path || [rawChannel, ...pathSegs].some((s) => !s || s === "." || s === "..")) fail("Invalid source path.");
 else {
   const declared = path;
   let text = await fetchSrc(path);
