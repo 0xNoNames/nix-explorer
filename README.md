@@ -18,7 +18,6 @@ Browse every option as a tree (`nixos/services/nginx/…`), fuzzy-search across 
 ## Usage
 
 ```sh
-nix run .                # build and serve gzipped on http://localhost:8000 (PORT=… to change)
 nix build .#site         # static site in ./result, deployable as-is
 nix run .#update-channels  # re-pin channels into channels.json
 node --test tests/lib.test.mjs  # unit tests (or: nix develop)

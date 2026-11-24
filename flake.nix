@@ -111,17 +111,9 @@
     {
       packages = forAll (
         system: pkgs: rec {
-          # Vendored as one pinned ESM file: no npm or JS build step.
-          marked = pkgs.fetchurl {
-            url = "https://cdn.jsdelivr.net/npm/marked@18.2.0/lib/marked.esm.js";
-            hash = "sha256-FiGU6pAqnW7KYBG7QrVzKZHKZQ4BfQN1t29CBIEMbBQ=";
-          };
-
           site =
             pkgs.runCommand "nixos-explorer-site"
               {
-                channelsJSON = builtins.toJSON (map (c: { inherit (c) name status revs; }) channels);
-                passAsFile = [ "channelsJSON" ];
                 nativeBuildInputs = [ pkgs.jq pkgs.minify ];
               }
               ''
@@ -129,7 +121,6 @@
                 cp ${./site}/*.html ${./site}/*.js ${./site}/*.css web/
                 # The Nix snowflake (NixOS artwork, CC-BY-4.0).
                 cp ${pkgs.nixos-icons}/share/icons/hicolor/scalable/apps/nix-snowflake.svg web/favicon.svg
-                cp ${marked} web/marked.js
                 # Minifies HTML (inline scripts and styles too), JS, CSS and SVG; data JSON is left as-is (gzip already removes its whitespace).
                 minify -r -o $out/ web/
                 ${lib.concatMapStrings (
@@ -144,7 +135,7 @@
                 ) channels}
                 # Decoded sizes of the data files, for the loading percentage: a compressing host
                 # (GitHub Pages) only sends the compressed Content-Length.
-                cp $channelsJSONPath channels.json
+                cp ${./channels.json} channels.json
                 ${lib.concatMapStrings (c: lib.concatMapStrings (s: ''
                   jq --arg c ${lib.escapeShellArg c.name} --arg s ${lib.escapeShellArg s} --argjson n "$(wc -c < "$out/data/"${lib.escapeShellArg c.name}/${lib.escapeShellArg s}.json)" \
                     'map(if .name == $c then .sizes[$s] = $n else . end)' channels.json > tmp.json
@@ -153,40 +144,7 @@
                 cp channels.json $out/data/channels.json
               '';
 
-          default = pkgs.writeShellScriptBin "nixos-explorer" ''
-            port=''${PORT:-8000}
-            tmp=$(mktemp -d)
-            trap 'rm -rf "$tmp"' EXIT
-            # nginx writes its pid and temp files under the prefix, so give it a scratch one.
-            cat > "$tmp/nginx.conf" <<EOF
-            daemon off;
-            pid $tmp/nginx.pid;
-            error_log stderr;
-            events {}
-            http {
-              include ${pkgs.nginx}/conf/mime.types;
-              default_type text/plain;
-              access_log /dev/stdout;
-              gzip on;
-              gzip_comp_level 6;
-              gzip_types application/json application/javascript text/css image/svg+xml;
-              client_body_temp_path $tmp/body;
-              proxy_temp_path $tmp/proxy;
-              fastcgi_temp_path $tmp/fastcgi;
-              uwsgi_temp_path $tmp/uwsgi;
-              scgi_temp_path $tmp/scgi;
-              server {
-                listen 127.0.0.1:$port;
-                root ${site};
-                # no-store: store files all have mtime 1970, so Last-Modified revalidation would serve stale builds.
-                add_header Cache-Control no-store always;
-                etag off;
-              }
-            }
-            EOF
-            echo "Serving on http://localhost:$port"
-            ${lib.getExe pkgs.nginx} -p "$tmp" -e stderr -c "$tmp/nginx.conf"
-          '';
+          default = site;
         }
       );
 
@@ -276,6 +234,7 @@
                 echo "wrote $out: $(jq -r 'map(.name) | join(", ")' "$out")" >&2
               '';
             });
+            meta.description = "Re-pin channels.json from NixOS/infra channels.nix";
           };
         }
       );
