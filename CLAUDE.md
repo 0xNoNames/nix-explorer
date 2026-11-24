@@ -9,7 +9,7 @@ Static web explorer for NixOS, home-manager and nix-darwin module options, built
 - `nix build .#site` — static site in `./result` (deployable as-is)
 - `node --test tests/lib.test.mjs` — unit tests (also `nix build .#checks.<system>.lib`)
 - `nix develop` — shell with node (for the unit tests)
-- `nix run .#update-channels` — re-pin all channels from NixOS/infra `channels.nix` into `channels.json` (new releases are picked up automatically); `nix flake update` only updates build tooling
+- `nix flake update && nix run .#update-channels` — refresh the `infra` input (NixOS/infra, for `channels.nix`) and build tooling, then re-pin all channels into `channels.json` (new releases are picked up once `infra` lists them)
 
 The flake only sees git-tracked files: `git add` (or `git add -N`) new files before `nix build`.
 
@@ -19,8 +19,8 @@ The flake only sees git-tracked files: `git add` (or `git add -N`) new files bef
   - NixOS: `nixos/lib/eval-config.nix { system = null; modules = [{ nixpkgs.hostPlatform = …; }]; }` → `.config.system.build.manual.optionsJSON` → `share/doc/nixos/options.json`
   - home-manager: `import <hm>/docs { pkgs; release; isReleaseBranch; }` (from `release.json`) → `.options.json` → `share/doc/home-manager/options.json`
   - nix-darwin: `import <darwin>/release.nix { nixpkgs; system; nix-darwin = { rev; shortRev; }; }` → `.docs.optionsJSON` → `share/doc/darwin/options.json`
-- **Channels** come from `channels.json`, not from flake inputs: inputs can't be generated from data, so the only input is the nixpkgs used for tooling. `nix run .#update-channels` (the `update-channels` app inlined in `flake.nix`, run from the repo root) does the following:
-  - reads https://github.com/NixOS/infra/blob/main/channels.nix and keeps `variant = "primary"` channels, including unmaintained ones; their `status` is shown in the UI.
+- **Channels** come from `channels.json`, not from flake inputs: inputs can't be generated from data, so the inputs are only the nixpkgs used for tooling and `infra` (NixOS/infra, `flake = false`) for its `channels.nix`. `nix run .#update-channels` (the `update-channels` app inlined in `flake.nix`, run from the repo root) does the following:
+  - reads `channels.nix` from the locked `infra` input (so `nix flake update` comes first) and keeps `variant = "primary"` channels, including unmaintained ones; their `status` is shown in the UI.
   - maps each to its branches: nixpkgs `nixos-YY.MM`, home-manager `release-YY.MM`, nix-darwin `nix-darwin-YY.MM`, and `master` for unstable.
   - pins each branch with `git ls-remote` + `nix flake prefetch` (rev + narHash). It checks all three branches exist before prefetching, and reuses the narHash of a rev already in the lock, so only moved branches are downloaded.
   - skips a channel whose home-manager or nix-darwin branch doesn't exist yet, which happens right after a NixOS release.

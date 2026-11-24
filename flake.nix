@@ -1,12 +1,17 @@
 {
   description = "Web explorer for NixOS, home-manager and nix-darwin modules";
 
-  # Build tooling only. The documented channels are pinned in channels.json
-  # (flake inputs can't be generated from data): refresh it with `nix run .#update-channels`.
+  # Build tooling, plus NixOS/infra for its list of channels. The documented channels themselves are
+  # pinned in channels.json (flake inputs can't be generated from data): refresh them with
+  # `nix flake update && nix run .#update-channels`.
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs.infra = {
+    url = "github:NixOS/infra";
+    flake = false;
+  };
 
   outputs =
-    { self, nixpkgs }:
+    { self, nixpkgs, infra }:
     let
       lib = nixpkgs.lib;
       systems = [
@@ -155,9 +160,10 @@
             type = "app";
             program = lib.getExe (pkgs.writeShellApplication {
               name = "update-channels";
-              runtimeInputs = [ pkgs.curl pkgs.jq pkgs.git ];
+              runtimeInputs = [ pkgs.jq pkgs.git ];
               text = ''
-                # Regenerates channels.json from NixOS/infra's channels.nix: every "primary" NixOS channel
+                # Regenerates channels.json from NixOS/infra's channels.nix (the locked `infra` input: run
+                # `nix flake update` first to pick up new releases): every "primary" NixOS channel
                 # (nixos-unstable, nixos-YY.MM, including unmaintained ones), each pinned to a nixpkgs,
                 # home-manager and nix-darwin commit plus narHash. Run from the repo root: nix run .#update-channels
                 set -euo pipefail
@@ -167,10 +173,9 @@
                 tmp=$(mktemp -d)
                 trap 'rm -rf "$tmp"' EXIT
 
-                curl -fsSL https://raw.githubusercontent.com/NixOS/infra/main/channels.nix -o "$tmp/channels.nix"
                 # { "<name>": "<status>" } for primary channels.
                 # shellcheck disable=SC2016 # ''${n} is Nix interpolation, not shell
-                nix eval --json --file "$tmp/channels.nix" channels \
+                nix eval --json --file ${infra}/channels.nix channels \
                   --apply 'cs: builtins.mapAttrs (_: c: c.status) (builtins.removeAttrs cs (builtins.filter (n: (cs.''${n}.variant or null) != "primary") (builtins.attrNames cs)))' \
                   > "$tmp/primary.json"
 
