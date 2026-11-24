@@ -309,9 +309,16 @@ function renderOption(o) {
         h("li", {}, h("a", { href: `source.html?${channelName}/${d}#${o.source}:${o.name}` }, d)))) : null))));
 }
 
+// The search lives in the URL (#search=…) so it can be shared. replaceState: no history entry per keystroke.
+let beforeSearch = ""; // hash to restore when the search is cleared
+const setHash = (hash) => history.replaceState(null, "", location.pathname + location.search + hash);
 function search() {
-  const { q, sources } = parseSearch($("search").value, SOURCES);
-  if (!q) return route(); // cleared: back to what the URL shows
+  const value = $("search").value.trim();
+  const { q, sources } = parseSearch(value, SOURCES);
+  const searching = location.hash.startsWith("#search=");
+  if (!q) { if (searching) setHash(beforeSearch); return route(); } // cleared: back to what the URL showed
+  if (!searching) beforeSearch = location.hash;
+  setHash(`#search=${encodeURI(value)}`);
   const hits = [];
   for (const o of allOptions) {
     if (sources && !sources.includes(o.source)) continue;
@@ -324,10 +331,11 @@ function search() {
     hits.slice(0, 200).map((x) => x[1]));
 }
 
-// Hash: "#<source>" or "#<source>:<dotted option or group name>".
+// Hash: "#<source>", "#<source>:<dotted option or group name>" or "#search=<query>".
 function route() {
   let hash;
   try { hash = decodeURIComponent(location.hash.slice(1)); } catch { return; }
+  if (hash.startsWith("search=")) { $("search").value = hash.slice(7); return search(); }
   const m = hash.match(/^([\w-]+)(?::([\s\S]*))?$/);
   if (!m) return $("detail").replaceChildren(h("p", {}, "Select an option, or search."));
   const [, source, name = ""] = m;
