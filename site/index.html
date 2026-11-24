@@ -213,32 +213,33 @@ const modularUsage = (o) => {
 };
 
 function renderNode(node, path) {
-  // A chain of groups ending in a single option collapses into one leaf: appstream -> enable => "appstream.enable".
+  // Single children move up into one row: appstream -> enable => leaf "appstream.enable", containers -> <name>
+  // => folder "containers.<name>". Only the head of a chain may be an option, so no option row disappears.
   const chain = [node];
   let leafPath = path;
-  for (let n = node; !n.option && Object.keys(n.children).length === 1; ) {
+  for (let n = node; (n === node || !n.option) && Object.keys(n.children).length === 1; ) {
     n = Object.values(n.children)[0];
     chain.push(n);
     leafPath = [...leafPath, n.name];
   }
+  const depth = path.length - 1;
+  const label = chain.flatMap((n, j) => [j ? "." : null, name(seg(n.name), depth + j)]);
   if (!Object.keys(chain.at(-1).children).length) {
-    const depth = path.length - 1;
-    const a = h("a", { className: "leaf", href: href(leafPath) },
-      ...chain.flatMap((n, j) => [j ? "." : null, name(seg(n.name), depth + j)]));
+    const a = h("a", { className: "leaf", href: href(leafPath), chain }, ...label);
     for (const n of chain) els.set(n, a); // routes to any merged node land on this leaf
     return a;
   }
-  const kids = sortedKids(node);
+  const kids = sortedKids(chain.at(-1));
   // Sources show their pinned revision, short like git; the full one in the tooltip (no GitHub links: offline site).
   const rev = path.length === 1 && revs[node.name];
-  const summary = h("summary", {}, name(node.name, path.length - 1), " ", h("span", { className: "count" }, String(countOptions(node))),
+  const summary = h("summary", {}, ...label, " ", h("span", { className: "count" }, String(countOptions(node))),
     rev ? h("span", { className: "count", title: rev }, ` @ ${rev.slice(0, 7)}`) : null);
-  summary.addEventListener("click", () => { location.hash = href(path); });
-  const d = h("details", { className: `c${(path.length - 1) % 6}` }, summary);
+  summary.addEventListener("click", () => { location.hash = href(leafPath); });
+  const d = h("details", { className: `c${(path.length - 1) % 6}`, chain }, summary);
   // Render children on first open; the full tree is tens of thousands of nodes.
-  d.renderKids = () => { if (d.childElementCount === 1) d.append(...kids.map((k) => renderNode(k, [...path, k.name]))); };
+  d.renderKids = () => { if (d.childElementCount === 1) d.append(...kids.map((k) => renderNode(k, [...leafPath, k.name]))); };
   d.addEventListener("toggle", () => d.open && d.renderKids());
-  els.set(node, d);
+  for (const n of chain) els.set(n, d);
   return d;
 }
 
@@ -268,13 +269,16 @@ function showPath(path) {
   current.setAttribute("aria-current", "true");
   current.scrollIntoView({ block: "nearest" });
 
-  const kids = sortedKids(node);
-  if (!kids.length) return show(null, [node.option]);
-  const opts = [node.option, ...kids.map((k) => k.option)].filter(Boolean);
-  const total = countOptions(node);
-  if (opts.length) show(crumbs(path), opts,
+  // Show the whole tree row: nodes merged into it (containers.<name>) list their options together.
+  const { chain } = el, end = chain.at(-1);
+  const rowPath = [...path.slice(0, path.length - chain.indexOf(node)), ...chain.slice(1).map((n) => n.name)];
+  const kids = sortedKids(end);
+  const opts = [...chain, ...kids].map((n) => n.option).filter(Boolean);
+  if (!kids.length && opts.length === 1) return show(null, opts);
+  const total = countOptions(chain[0]);
+  if (opts.length) show(crumbs(rowPath), opts,
     `${opts.length} option${opts.length > 1 ? "s" : ""} directly here, ${total} in total. Expand the tree for the rest.`);
-  else show(crumbs(path), [], `${total} options below. Expand the tree to browse.`);
+  else show(crumbs(rowPath), [], `${total} options below. Expand the tree to browse.`);
 }
 
 function renderOption(o) {
