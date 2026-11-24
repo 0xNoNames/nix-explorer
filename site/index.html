@@ -261,9 +261,10 @@ const crumbs = (path) => [
   ...path.slice(1).flatMap((s, i) => [i ? "." : null, h("a", { href: href(path.slice(0, i + 2)) }, name(seg(s), i + 1))]),
 ];
 
-function show(title, options, note) {
+// Options in `opened` (or a lone option) start with their details open.
+function show(title, options, note, opened = []) {
   $("detail").replaceChildren(...(title ? [h("h2", {}, ...[title].flat(), note ? h("div", { className: "note" }, note) : null)] : []),
-    ...options.map(renderOption));
+    ...options.map((o) => renderOption(o, options.length === 1 || opened.includes(o))));
   $("detail").scrollTop = 0;
 }
 
@@ -288,16 +289,18 @@ function showPath(path) {
   const opts = [...chain, ...kids].map((n) => n.option).filter(Boolean);
   if (!kids.length && opts.length === 1) return show(null, opts);
   const total = countOptions(chain[0]);
+  // The selected row's own options (not its children's) start open.
   if (opts.length) show(crumbs(rowPath), opts,
-    `${opts.length} option${opts.length > 1 ? "s" : ""} directly here, ${total} in total. Expand the tree for the rest.`);
+    `${opts.length} option${opts.length > 1 ? "s" : ""} directly here, ${total} in total. Expand the tree for the rest.`,
+    chain.map((n) => n.option));
   else show(crumbs(rowPath), [], `${total} options below. Expand the tree to browse.`);
 }
 
-function renderOption(o) {
+function renderOption(o, open) {
   const row = (k, v) => (v == null ? [] : [h("dt", {}, k), h("dd", {}, v)]);
   const desc = o.description ? md(o.description, o.source) : null;
   return h("article", {},
-    h("details", { className: "info" }, h("summary", {},
+    h("details", { className: "info", open }, h("summary", {},
       h("h3", {}, h("span", {}, ...crumbs([o.source, ...o.loc])), desc ? h("span", { className: "desc" }, desc.textContent) : null)),
       desc, h("dl", {},
       ...row("Usage", o.modular ? nixCode(modularUsage(o)) : null),
