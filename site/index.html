@@ -27,6 +27,10 @@
     padding: 0 .3rem; color: inherit; opacity: .6; cursor: pointer; }
   #clear:hover, #clear:focus-visible { opacity: 1; }
   #search:placeholder-shown + #clear { display: none; }
+  #suggest { position: absolute; top: 100%; left: 0; right: 0; z-index: 1; margin: .2rem 0 0; padding: .2rem 0; list-style: none;
+    background: Canvas; border: 1px solid #8886; border-radius: .3rem; font: .9rem ui-monospace, monospace; }
+  #suggest li { padding: .2rem .5rem; cursor: pointer; }
+  #suggest li:hover, #suggest [aria-selected="true"] { background: #8883; }
   .end { justify-self: end; display: flex; align-items: center; gap: .75rem; }
   .repo { display: flex; color: inherit; opacity: .7; }
   .repo:hover, .repo:focus-visible { opacity: 1; }
@@ -116,7 +120,7 @@
 <body>
 <header>
   <label>Channel <select id="channel"></select></label>
-  <span class="searchbox"><input id="search" type="search" placeholder="Fuzzy search options… (@nixos @home @darwin)" aria-label="Fuzzy search options"><button id="clear" type="button" title="Clear search" aria-label="Clear search"><svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg></button></span>
+  <span class="searchbox"><input id="search" type="search" placeholder="Fuzzy search options… (@nixos @home @darwin)" aria-label="Fuzzy search options" role="combobox" aria-autocomplete="list" aria-controls="suggest" aria-expanded="false" autocomplete="off"><button id="clear" type="button" title="Clear search" aria-label="Clear search"><svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg></button><ul id="suggest" role="listbox" aria-label="Sources" hidden></ul></span>
   <!-- Inline SVG: the icon itself makes no request (offline site); only clicking leaves it. -->
   <div class="end">
   <button id="theme" class="repo" type="button" title="Toggle dark/light theme" aria-label="Toggle dark/light theme"><svg id="sun" width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06"/></svg><svg id="moon" width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6.2 1.2a6.5 6.5 0 1 0 8.6 8.6A5.5 5.5 0 0 1 6.2 1.2z"/></svg></button>
@@ -130,7 +134,7 @@
 </main>
 <script type="module">
 import { marked } from "./marked.js";
-import { buildTree, countOptions, esc, fuzzyScore, nixHTML, optionName, optionPath, parseSearch, preprocessMd } from "./lib.js";
+import { buildTree, countOptions, esc, fuzzyScore, nixHTML, optionName, optionPath, parseSearch, preprocessMd, sourceSuggestions } from "./lib.js";
 
 const SOURCES = ["nixos", "home-manager", "darwin"];
 const $ = (id) => document.getElementById(id);
@@ -337,7 +341,43 @@ function route() {
   showPath(other ? [other.source, ...other.loc] : path);
 }
 
-$("search").addEventListener("input", search);
+// "@source" completion: a listbox under the input. ↑/↓ pick, Enter or Tab accepts, Esc closes.
+let picks = [], active = 0;
+function renderSuggest() {
+  const el = $("search");
+  $("suggest").hidden = !picks.length;
+  el.setAttribute("aria-expanded", String(picks.length > 0));
+  if (picks.length) el.setAttribute("aria-activedescendant", `suggest-${active}`); else el.removeAttribute("aria-activedescendant");
+  $("suggest").replaceChildren(...picks.map((s, i) => {
+    const li = h("li", { id: `suggest-${i}`, role: "option" }, `@${s}`);
+    li.setAttribute("aria-selected", String(i === active));
+    li.addEventListener("mousedown", (e) => { e.preventDefault(); accept(s); }); // keep focus in the input
+    return li;
+  }));
+}
+function suggest() {
+  const el = $("search");
+  picks = el.selectionEnd === el.value.length ? sourceSuggestions(el.value, SOURCES) : [];
+  active = 0;
+  renderSuggest();
+}
+function accept(s) {
+  $("search").value = $("search").value.replace(/@\S*$/, `@${s} `);
+  picks = [];
+  renderSuggest();
+  search();
+}
+$("search").addEventListener("input", () => { suggest(); search(); });
+$("search").addEventListener("blur", () => { picks = []; renderSuggest(); });
+$("search").addEventListener("keydown", (e) => {
+  if (!picks.length) return;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") active = (active + (e.key === "ArrowDown" ? 1 : picks.length - 1)) % picks.length;
+  else if (e.key === "Enter" || e.key === "Tab") return e.preventDefault(), accept(picks[active]);
+  else if (e.key === "Escape") picks = [];
+  else return;
+  e.preventDefault();
+  renderSuggest();
+});
 $("clear").addEventListener("click", () => { $("search").value = ""; search(); $("search").focus(); });
 
 // Theme: the head script applies the saved choice on both pages (none saved = follow the system).

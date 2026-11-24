@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MODULAR_ROOT, buildTree, countOptions, findOptionLines, fuzzyScore, nixImports, nixTokens, normalizeDecl, optionName, optionPath, parseSearch, preprocessMd } from "../site/lib.js";
+import { MODULAR_ROOT, buildTree, countOptions, findOptionLines, fuzzyScore, nixImports, nixTokens, normalizeDecl, optionName, optionPath, parseSearch, preprocessMd, sourceSuggestions } from "../site/lib.js";
 
 test("normalizeDecl handles both declaration formats", () => {
   assert.equal(normalizeDecl("nixos/modules/a.nix"), "nixpkgs/nixos/modules/a.nix");
@@ -181,4 +181,15 @@ test("parseSearch pulls @source filters out of the query", () => {
   assert.deepEqual(parseSearch("git @home @d", S), { q: "git", sources: ["home-manager", "darwin"] });
   assert.deepEqual(parseSearch("git @", S), { q: "git", sources: null });
   assert.deepEqual(parseSearch("git @nope", S), { q: "git", sources: [] });
+});
+
+test("sourceSuggestions lists sources for the @prefix being typed", () => {
+  const S = ["nixos", "home-manager", "darwin"];
+  assert.deepEqual(sourceSuggestions("git @h", S), ["home-manager"]);
+  assert.deepEqual(sourceSuggestions("@Ni", S), ["nixos"]);
+  assert.deepEqual(sourceSuggestions("@", S), S);
+  assert.deepEqual(sourceSuggestions("@nixos", S), []);
+  assert.deepEqual(sourceSuggestions("@x", S), []);
+  assert.deepEqual(sourceSuggestions("@n git", S), []);
+  assert.deepEqual(sourceSuggestions("a@n", S), []);
 });

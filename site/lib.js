@@ -81,6 +81,13 @@ export function parseSearch(value, sources) {
   return { q, sources: picks };
 }
 
+// Sources an "@prefix" being typed at the end of the text could be ([] once it's complete).
+export function sourceSuggestions(text, sources) {
+  const p = text.toLowerCase().match(/(?:^|\s)@(\S*)$/)?.[1];
+  const hits = p == null ? [] : sources.filter((s) => s.startsWith(p));
+  return hits.length === 1 && hits[0] === p ? [] : hits;
+}
+
 // Minimal Nix tokenizer for highlighting: returns [[class | null, text], …] covering all of src.
 // Strings are scanned with a context stack so ${…} interpolations (which may hold nested strings) are code.
 const NIX_CODE = new RegExp([
