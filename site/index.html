@@ -79,7 +79,7 @@
   /* The row padding lives on the summary, so its hover fills the whole row and spans the panel. */
   .info > summary { list-style: none; white-space: normal; margin: 0 -1rem; padding: .75rem 1rem; }
   .info > summary h3 { margin: 0; }
-  .info[open] { padding-bottom: .75rem; }
+  .info[open] { padding-bottom: .75rem; overflow-wrap: anywhere; } /* long URLs/paths would widen the panel and shift it sideways */
   .info > summary::-webkit-details-marker { display: none; }
   .info > summary h3::before { content: "▸"; opacity: .6; margin-right: -.4rem; }
   .info[open] > summary h3::before { content: "▾"; }
