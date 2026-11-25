@@ -204,7 +204,7 @@ async function load(channel) {
       } }))).json();
     })));
   } catch (e) {
-    if (seq === loading) $("tree").textContent = `Could not load ${channel.name}: ${e.message}`;
+    if (seq === loading) { $("tree").textContent = `Could not load ${channel.name}: ${e.message}`; $("detail").classList.remove("stale"); }
     return;
   }
   if (seq !== loading) return;
