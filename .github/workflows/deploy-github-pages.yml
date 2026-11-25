@@ -61,8 +61,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Update channels" channels.json flake.lock
-          git pull --rebase origin main
-          git push origin HEAD:main
+          git pull --rebase origin main && git push origin HEAD:main ||
+            { echo "::warning::Could not push the updated channels.json and flake.lock"; exit 1; }
 
   # Deployment job
   deploy:
