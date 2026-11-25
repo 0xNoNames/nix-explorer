@@ -39,7 +39,6 @@ jobs:
         run: |
           nix flake update infra # new channels.nix: picks up new NixOS releases
           nix run --verbose .#update-channels
-          git add -N channels.json
           nix build --print-build-logs .#site
       - name: Stage the site
         # `result` points into the store, which is read-only and full of
