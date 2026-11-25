@@ -10,7 +10,7 @@ Browse every option as a tree (`nixos/services/nginx/…`), fuzzy-search across 
 
 - **All three module systems**: NixOS, home-manager and nix-darwin, for each channel (unstable plus every primary release).
 - **Self-contained**: no request leaves the site. JS is vendored, sources are bundled and there are no external links, so it runs in air-gapped or isolated environments.
-- **Tree + fuzzy search** with readable, shareable URLs, e.g. `?nixos-26.05#nixos:services.nginx.virtualHosts.<name>.forceSSL`.
+- **Tree + fuzzy search** with readable, shareable URLs, e.g. `?26.05#nixos:services.nginx.virtualHosts.<name>.forceSSL`.
 - **Rendered docs**: the nixpkgs Markdown dialect, with `{option}` cross-links and Nix syntax highlighting.
 - **Jump to source**: opens the declaring file at the option's line range, following imports for submodule options.
 - **No JS build step**: everything is built with a Nix flake. The only third-party JS is a pinned `marked`. HTML, JS, CSS and SVG are minified at build time with `minify` from nixpkgs.
