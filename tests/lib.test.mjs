@@ -30,6 +30,17 @@ test("buildTree nests options by path, including options that have children", ()
   assert.equal(countOptions(root), 5);
 });
 
+test("buildTree takes packages (meta.position decls, quoted attr names) like options", () => {
+  const root = buildTree({ nixpkgs: {
+    hello: { loc: ["hello"], version: "2.12", declarations: ["pkgs/by-name/he/hello/package.nix:42"], line: 42 },
+    'python3Packages."a.b"': { loc: ["python3Packages", "a.b"], declarations: [] },
+  } });
+  const hello = root.children.nixpkgs.children.hello.option;
+  assert.deepEqual([hello.source, hello.decls, hello.line], ["nixpkgs", ["nixpkgs/pkgs/by-name/he/hello/package.nix"], 42]);
+  assert.equal(root.children.nixpkgs.children.python3Packages.children["a.b"].option.name, 'python3Packages."a.b"');
+  assert.equal(optionName(["python3Packages", "a.b"]), 'python3Packages."a.b"'); // URL name = package key, so byKey routes it
+});
+
 test("buildTree groups modular services under one folder", () => {
   const imp = "<imports = [ pkgs.php.services.default ]>";
   const root = buildTree({ nixos: {

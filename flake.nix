@@ -1,5 +1,5 @@
 {
-  description = "Web explorer for NixOS, home-manager and nix-darwin modules";
+  description = "Web explorer for NixOS, home-manager and nix-darwin modules, and nixpkgs packages";
 
   # Build tooling, plus NixOS/infra for its list of channels. The documented channels themselves are
   # pinned in channels.json (flake inputs can't be generated from data): refresh them with
@@ -66,6 +66,42 @@
           cp ${nixosJSON}/share/doc/nixos/options.json $out/nixos.json
           cp ${hmJSON}/share/doc/home-manager/options.json $out/home-manager.json
           cp ${darwinJSON}/share/doc/darwin/options.json $out/darwin.json
+          cp ${channelPackages pkgs c} $out/nixpkgs.json
+        '';
+
+      # Packages, shaped like an options JSON ({ "<attr>": { loc, description, declarations, … } }) so the
+      # site and channelSources treat them as a fourth source. Generated the way nixpkgs' make-tarball.nix
+      # builds search.nixos.org's packages.json (the channel's pkgs/top-level/packages-info.nix), then trimmed
+      # (platforms, maintainers… are dropped).
+      channelPackages =
+        pkgs: c:
+        pkgs.runCommand "packages-${c.name}" { nativeBuildInputs = [ pkgs.nix pkgs.jq ]; } ''
+          # Evaluated (never built) for x86_64-linux, like search.nixos.org: upstream's generator throws on darwin,
+          # and this keeps the list the same whatever the builder.
+          export NIX_STATE_DIR=$TMPDIR NIX_PATH= NIX_CONFIG="system = x86_64-linux"
+          src=${c.nixpkgs}
+          info=$src/pkgs/top-level/packages-info.nix
+          if [ -f "$info" ]; then expr="import $info {}"
+          # TODO: remove this branch and ./packages-info.nix once 25.11 leaves channels.json (it's unmaintained):
+          # channels before 26.05 don't ship packages-info.nix. The string avoids copying nixpkgs to the store in a build.
+          else expr="import ${./packages-info.nix} { nixpkgs = \"$src\"; }"; fi
+          nix-instantiate --eval --raw --expr "$expr" | sed "s|$src/||g" | jq -c '.packages | with_entries(.key as $k | .value |= (.meta as $m | {
+              # Attr names are lib.showAttrPath: dotted segments quoted.
+              loc: [$k | scan("\"[^\"]*\"|[^.]+") | gsub("^\"|\"$"; "")],
+              pname, version,
+              description: $m.description,
+              longDescription: $m.longDescription,
+              homepage: ($m.homepage | if type == "array" then .[0] else . end),
+              license: [$m.license | if type == "array" then .[] else . end | select(. != null)
+                | if type == "object" then (.spdxId // .fullName // .shortName) else . end],
+              mainProgram: $m.mainProgram,
+              broken: $m.broken, unfree: $m.unfree, insecure: $m.insecure,
+              # Positions outside nixpkgs (store paths) are not bundled.
+              declarations: [$m.position | select(type == "string" and (startswith("/") | not))],
+              line: [$m.position // "" | capture(":(?<n>[0-9]+)$").n | tonumber][0]
+            } | with_entries(select(.value != null and .value != false and .value != []))))' > $out
+          # Upstream bails out below 100k too: a much smaller index means the eval went wrong.
+          [ "$(jq length $out)" -gt 100000 ]
         '';
 
       # The .nix files that declare options, copied from the channel's inputs so the
@@ -145,7 +181,7 @@
                   jq --arg c ${lib.escapeShellArg c.name} --arg s ${lib.escapeShellArg s} --argjson n "$(wc -c < "$out/data/"${lib.escapeShellArg c.name}/${lib.escapeShellArg s}.json)" \
                     'map(if .name == $c then .sizes[$s] = $n else . end)' channels.json > tmp.json
                   mv tmp.json channels.json
-                '') [ "nixos" "home-manager" "darwin" ]) channels}
+                '') [ "nixos" "home-manager" "darwin" "nixpkgs" ]) channels}
                 cp channels.json $out/data/channels.json
               '';
 

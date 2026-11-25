@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nix module explorer</title>
-<meta name="description" content="Browse and search NixOS, home-manager and nix-darwin module options, with docs and declaration sources.">
+<meta name="description" content="Browse and search NixOS, home-manager and nix-darwin module options and nixpkgs packages, with docs and declaration sources.">
 <meta property="og:site_name" content="Nix module explorer">
 <meta property="og:title" content="Nix module explorer">
-<meta property="og:description" content="Browse and search NixOS, home-manager and nix-darwin module options, with docs and declaration sources.">
+<meta property="og:description" content="Browse and search NixOS, home-manager and nix-darwin module options and nixpkgs packages, with docs and declaration sources.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#5277c3">
 <link rel="stylesheet" href="nix.css">
@@ -41,6 +41,7 @@
   .repo { display: flex; color: inherit; opacity: .7; }
   .repo:hover, .repo:focus-visible { opacity: 1; }
   button.repo { background: none; border: 0; padding: 0; cursor: pointer; }
+  .chunk { display: flow-root; } /* contains its rows' margins, so a culled chunk's measured height is exact */
   .clear { font-size: .8rem; font-weight: normal; margin-left: .5rem; text-decoration: underline; } /* h2 links are plain otherwise */
   /* --tree is set by dragging the divider. */
   main { display: grid; grid-template-columns: var(--tree, minmax(18rem, 30%)) auto 1fr; min-height: 0; }
@@ -131,7 +132,7 @@
 <body>
 <header>
   <label class="channel">Channel <select id="channel"></select></label>
-  <span class="searchbox"><input id="search" type="search" placeholder="Fuzzy search options… (@nixos @home @darwin)" aria-label="Fuzzy search options" role="combobox" aria-autocomplete="list" aria-controls="suggest" aria-expanded="false" autocomplete="off"><button id="clear" type="button" title="Clear search" aria-label="Clear search"><svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg></button><ul id="suggest" role="listbox" aria-label="Sources" hidden></ul></span>
+  <span class="searchbox"><input id="search" type="search" placeholder="Fuzzy search options and packages… (@nixos @home @darwin @nixpkgs)" aria-label="Fuzzy search options and packages" role="combobox" aria-autocomplete="list" aria-controls="suggest" aria-expanded="false" autocomplete="off"><button id="clear" type="button" title="Clear search" aria-label="Clear search"><svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg></button><ul id="suggest" role="listbox" aria-label="Sources" hidden></ul></span>
   <!-- Inline SVG: the icon itself makes no request (offline site); only clicking leaves it. -->
   <div class="end">
   <button id="theme" class="repo" type="button" title="Toggle dark/light theme" aria-label="Toggle dark/light theme"><svg id="sun" width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06"/></svg><svg id="moon" width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6.2 1.2a6.5 6.5 0 1 0 8.6 8.6A5.5 5.5 0 0 1 6.2 1.2z"/></svg></button>
@@ -147,7 +148,7 @@
 import { marked } from "./marked.js";
 import { buildTree, countOptions, esc, fuzzyScore, nixHTML, optionName, optionPath, parseSearch, preprocessMd, sourceSuggestions } from "./lib.js";
 
-const SOURCES = ["nixos", "home-manager", "darwin"];
+const SOURCES = ["nixos", "home-manager", "darwin", "nixpkgs"];
 const $ = (id) => document.getElementById(id);
 const h = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null)); return e; };
 
@@ -210,7 +211,7 @@ async function load(channel) {
   if (seq !== loading) return;
   root = buildTree(Object.fromEntries(SOURCES.map((s, i) => [s, data[i]])));
   channelName = short(channel.name);
-  revs = { nixos: channel.nixpkgs.rev, "home-manager": channel["home-manager"].rev, darwin: channel["nix-darwin"].rev };
+  revs = { nixos: channel.nixpkgs.rev, "home-manager": channel["home-manager"].rev, darwin: channel["nix-darwin"].rev, nixpkgs: channel.nixpkgs.rev };
   allOptions = SOURCES.flatMap((s) => collect(root.children[s]));
   for (const o of allOptions) o.key = o.name.toLowerCase();
   byKey = new Map(allOptions.map((o) => [`${o.source}:${o.name}`, o]));
@@ -221,8 +222,10 @@ async function load(channel) {
 
 const collect = (n) => [...(n.option ? [n.option] : []), ...Object.values(n.children).flatMap(collect)];
 // "<imports = [ … ]>" segments (NixOS modular services) go after regular names.
+// A Collator: localeCompare is far slower on package sets of 10k+ names.
+const collate = new Intl.Collator().compare;
 const sortedKids = (n) => Object.values(n.children).sort((a, b) =>
-  a.name.startsWith("<") - b.name.startsWith("<") || a.name.localeCompare(b.name));
+  a.name.startsWith("<") - b.name.startsWith("<") || collate(a.name, b.name));
 
 // Dotted segments are quoted, as in Nix: boot.kernel.sysctl."net.core.rmem_max".
 // Modular service keys (pkgs.X.services.Y) are import paths, not attribute names: left unquoted.
@@ -232,6 +235,17 @@ const seg = (s) => (s.includes(".") && !s.startsWith("pkgs.") ? `"${s}"` : s);
 const name = (text, depth) => h("span", { className: `name c${depth % 6}` }, text);
 
 // How a modular service option is actually set.
+// How to get a package, as highlighted HTML (every token escaped). Quoted attr names (rubyPackages."http_parser.rb")
+// need shell quotes; nix run only when meta.mainProgram says which binary to start. `nixpkgs` is the user's registry
+// entry, maybe another channel than this one. Shell lines reuse the Nix token colours: nixTokens would read `#…` as a comment.
+const packageUsage = (o) => {
+  const tk = (c, t) => `<span class="tk-${c}">${esc(t)}</span>`;
+  const arg = (s) => (s.includes('"') ? tk("string", `'${s}'`) : tk("attr", s));
+  const flake = arg(`nixpkgs#${o.name}`);
+  return [`${tk("keyword", "nix-shell")} ${tk("constant", "-p")} ${arg(o.name)}`, `${tk("keyword", "nix shell")} ${flake}`,
+    o.mainProgram && `${tk("keyword", "nix run")} ${flake}`,
+    nixHTML(`# NixOS (or home.packages in home-manager)\nenvironment.systemPackages = [ pkgs.${o.name} ];`)].filter(Boolean).join("\n");
+};
 const modularUsage = (o) => {
   const rest = o.loc.slice(2).map(seg).join(".");
   return `system.services.<name> = {\n  imports = [ ${o.modular} ];${rest ? `\n  ${rest} = …;` : ""}\n};`;
@@ -239,25 +253,33 @@ const modularUsage = (o) => {
 
 // Single children move up into one row: appstream -> enable => leaf "appstream.enable", containers -> <name>
 // => folder "containers.<name>". Only the head of a chain may be an option, so no option row disappears.
-function chainOf(node) {
+const hasKids = (n) => Object.keys(n.children).length > 0;
+// groupsOnly (nixpkgs tree): only a set holding nothing but one sub-set merges (nixos-artwork.wallpapers), so no
+// package shows up as a row or hides in a merged one (vimPlugins stays apart from nvim-treesitter-parsers).
+function chainOf(node, groupsOnly) {
   const chain = [node];
-  for (let n = node; (n === node || !n.option) && Object.keys(n.children).length === 1; ) chain.push(n = Object.values(n.children)[0]);
+  for (let n = node; (n === node || !n.option) && Object.keys(n.children).length === 1 && (!groupsOnly || hasKids(Object.values(n.children)[0])); )
+    chain.push(n = Object.values(n.children)[0]);
   return chain;
 }
 // The option a group with a single descendant chain merges into (_module => _module.args), else undefined.
 const loneOption = (node) => { const end = chainOf(node).at(-1); return Object.keys(end.children).length ? undefined : end.option; };
 
+// The nixpkgs tree shows package sets only (972 groups, against 150k packages); packages are listed in the detail panel.
 function renderNode(node, path) {
-  const chain = chainOf(node);
+  const groupsOnly = path[0] === "nixpkgs";
+  const chain = chainOf(node, groupsOnly);
   const leafPath = [...path, ...chain.slice(1).map((n) => n.name)];
   const depth = path.length - 1;
   const label = chain.flatMap((n, j) => [j ? "." : null, name(seg(n.name), depth + j)]);
-  if (!Object.keys(chain.at(-1).children).length) {
-    const a = h("a", { className: "leaf", href: href(leafPath), chain }, ...label);
+  const kids = sortedKids(chain.at(-1)).filter((k) => !groupsOnly || hasKids(k));
+  if (!kids.length) {
+    // A nixpkgs leaf is a set holding only packages: it shows its count like any folder.
+    const a = h("a", { className: "leaf", href: href(leafPath), chain }, ...label,
+      groupsOnly ? h("span", { className: "count" }, " " + countOptions(node)) : null);
     for (const n of chain) els.set(n, a); // routes to any merged node land on this leaf
     return a;
   }
-  const kids = sortedKids(chain.at(-1));
   // Sources show their pinned revision, short like git; the full one in the tooltip (no GitHub links: offline site).
   const rev = path.length === 1 && revs[node.name];
   const summary = h("summary", {}, ...label, " ", h("span", { className: "count" }, String(countOptions(node))),
@@ -279,17 +301,46 @@ const crumbs = (path) => [
 
 // A sub-group as a row like an option's: its path (each part a link), option count; the rest of the row opens it.
 const plural = (n, w) => `${n} ${w}${n > 1 ? "s" : ""}`;
+// The nixpkgs source lists packages, in the same tree as options.
+const unit = (source) => (source === "nixpkgs" ? "package" : "option");
 function renderGroup(path, node) {
   const row = h("div", { className: "group" },
-    h("h3", {}, h("span", {}, ...crumbs(path)), h("span", { className: "desc" }, plural(countOptions(node), "option"))));
+    h("h3", {}, h("span", {}, ...crumbs(path)), h("span", { className: "desc" }, plural(countOptions(node), unit(path[0])))));
   row.addEventListener("click", (e) => { if (!e.target.closest("a")) location.hash = href(path); });
   return h("article", {}, row);
 }
 
-// Options in `opened` (or a lone option) start with their details open.
+// Long lists (24k top-level packages) render in chunks as they scroll near the view, and chunks that scroll far
+// away are emptied down to their measured height (culling), so the DOM stays a few screens big however far you scroll.
+const CHUNK = 50, ROW = 40; // ROW: a collapsed row's height in px, the guess for chunks not rendered yet
+let lister; // the shown list's IntersectionObserver
+// Options in `opened` (or a lone option) start with their details open; toggles are remembered across culling.
 function show(title, options, note, opened = []) {
-  $("detail").replaceChildren(...(title ? [h("h2", {}, ...[title].flat(), note ? h("div", { className: "note" }, note) : null)] : []),
-    ...options.map((o) => renderOption(o, options.length === 1 || opened.includes(o))));
+  lister?.disconnect();
+  const open = new Set(options.length === 1 ? options : opened);
+  const fill = (c) => {
+    c.style.height = "";
+    c.append(...c.items.map((o) => {
+      const a = renderOption(o, open.has(o));
+      a.firstChild.addEventListener("toggle", (e) => (e.target.open ? open.add(o) : open.delete(o)));
+      return a;
+    }));
+  };
+  const chunks = [];
+  for (let i = 0; i < options.length; i += CHUNK) {
+    const c = h("div", { className: "chunk", items: options.slice(i, i + CHUNK) });
+    c.style.height = `${c.items.length * ROW}px`;
+    chunks.push(c);
+  }
+  lister = new IntersectionObserver((entries) => {
+    for (const { target: c, isIntersecting } of entries) {
+      if (isIntersecting && !c.childElementCount) fill(c);
+      else if (!isIntersecting && c.childElementCount) { c.style.height = `${c.offsetHeight}px`; c.replaceChildren(); }
+    }
+  }, { root: $("detail"), rootMargin: "100% 0px" }); // keeps a screen above and below rendered
+  $("detail").replaceChildren(...(title ? [h("h2", {}, ...[title].flat(), note ? h("div", { className: "note" }, note) : null)] : []), ...chunks);
+  if (chunks.length) fill(chunks[0]); // at the top: rendered now, not a frame later
+  for (const c of chunks) lister.observe(c);
   $("detail").scrollTop = 0;
 }
 
@@ -300,26 +351,28 @@ function showPath(path) {
     node = node.children[seg];
     if (!node) return $("detail").replaceChildren(h("p", {}, `“${optionName(path.slice(1))}” is not in ${path[0]} on ${channelName}.`));
     if (el?.renderKids) { el.renderKids(); el.open = true; } // merged leaves have no kids to open
+    if (!els.has(node)) break; // a package: not in the tree, so its group's row is selected
     el = els.get(node);
   }
   current?.removeAttribute("aria-current");
   current = el.tagName === "DETAILS" ? el.firstChild : el;
   current.setAttribute("aria-current", "true");
   current.scrollIntoView({ block: "nearest" });
+  if (!els.has(node)) return show(null, [node.option]);
 
   // Show the whole tree row: nodes merged into it (containers.<name>) list their options together.
-  const { chain } = el, end = chain.at(-1);
+  const { chain } = el;
   const rowPath = [...path.slice(0, path.length - chain.indexOf(node)), ...chain.slice(1).map((n) => n.name)];
-  const kids = sortedKids(end);
+  const kids = sortedKids(chain.at(-1));
   // Sub-groups holding a single option (_module => _module.args) show that option here instead.
   const opts = [...chain.map((n) => n.option), ...kids.map((k) => k.option ?? loneOption(k))].filter(Boolean);
   if (!kids.length && opts.length === 1) return show(null, opts);
   const total = countOptions(chain[0]);
   // Then sub-groups with no option of their own (programs.git), as rows too.
   const groups = kids.filter((k) => !k.option && !loneOption(k));
-  const here = [opts.length && `${plural(opts.length, "option")} directly here`, groups.length && plural(groups.length, "group")];
+  const here = [opts.length && `${plural(opts.length, unit(path[0]))} directly here`, groups.length && plural(groups.length, "group")];
   // The selected row's own options (not its children's) start open.
-  show(crumbs(rowPath), opts, `${here.filter(Boolean).join(", ")}; ${total} options in total.`, chain.map((n) => n.option));
+  show(crumbs(rowPath), opts, `${here.filter(Boolean).join(", ")}; ${total} ${unit(path[0])}s in total.`, chain.map((n) => n.option));
   if (groups.length) $("detail").append(h("h4", { className: "groups" }, "Groups"), ...groups.map((k) => renderGroup([...rowPath, k.name], k)));
 }
 
@@ -330,13 +383,21 @@ function renderOption(o, open) {
     h("details", { className: "info", open }, h("summary", {},
       h("h3", {}, h("span", {}, ...crumbs([o.source, ...o.loc])), desc ? h("span", { className: "desc" }, desc.textContent) : null)),
       desc, h("dl", {},
-      ...row("Usage", o.modular ? nixCode(modularUsage(o)) : null),
+      ...row("Usage", o.modular ? nixCode(modularUsage(o)) : o.source === "nixpkgs" ? h("pre", {}, h("code", { innerHTML: packageUsage(o) })) : null),
       ...row("Type", o.type),
       ...row("Default", literal(o.default, o.source)),
       ...row("Example", literal(o.example, o.source)),
       ...row("Read-only", o.readOnly ? "yes" : null),
-      ...row("Declared in", o.decls.length ? h("ul", {}, ...o.decls.map((d) =>
-        h("li", {}, h("a", { href: `source.html?${channelName}/${d}#${o.source}:${o.name}` }, d)))) : null))));
+      // Packages (source nixpkgs): the homepage is text, not a link, since no request may leave the site.
+      ...row("Version", o.version || null),
+      ...row("License", o.license?.join(", ")),
+      ...row("Homepage", o.homepage),
+      ...row("Main program", o.mainProgram),
+      ...row("Status", [o.broken && "broken", o.unfree && "unfree", o.insecure && "insecure"].filter(Boolean).join(", ") || null),
+      ...row("Details", o.longDescription ? md(o.longDescription, o.source) : null),
+      // Packages know their line (meta.position); options are found by name in source.html.
+      ...row(o.source === "nixpkgs" ? "Defined in" : "Declared in", o.decls.length ? h("ul", {}, ...o.decls.map((d) =>
+        h("li", {}, h("a", { href: `source.html?${channelName}/${d}#${o.line ? `L${o.line}` : `${o.source}:${o.name}`}` }, d)))) : null))));
 }
 
 // The search lives in the URL (#search=…) so it can be shared. replaceState: no history entry per keystroke.

@@ -1,6 +1,6 @@
 # nix-explorer
 
-A static, offline-friendly explorer for **NixOS**, **home-manager** and **nix-darwin** module options.
+A static, offline-friendly explorer for **NixOS**, **home-manager** and **nix-darwin** module options, and **nixpkgs** packages.
 
 Browse every option as a tree (`nixos/services/nginx/…`), fuzzy-search across ~33k options, read the rendered docs, and jump straight to the declaration in the bundled Nix source, across every NixOS channel, including unmaintained ones.
 
@@ -9,6 +9,7 @@ Browse every option as a tree (`nixos/services/nginx/…`), fuzzy-search across 
 ## Features
 
 - **All three module systems**: NixOS, home-manager and nix-darwin, for each channel (unstable plus every primary release).
+- **Every nixpkgs package** (~120k), with version, license and description, linked to the line that defines it.
 - **Self-contained**: no request leaves the site. JS is vendored, sources are bundled and there are no external links, so it runs in air-gapped or isolated environments.
 - **Tree + fuzzy search** with readable, shareable URLs, e.g. `?26.05#nixos:services.nginx.virtualHosts.<name>.forceSSL`.
 - **Rendered docs**: the nixpkgs Markdown dialect, with `{option}` cross-links and Nix syntax highlighting.
