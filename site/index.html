@@ -237,16 +237,19 @@ const modularUsage = (o) => {
   return `system.services.<name> = {\n  imports = [ ${o.modular} ];${rest ? `\n  ${rest} = …;` : ""}\n};`;
 };
 
-function renderNode(node, path) {
-  // Single children move up into one row: appstream -> enable => leaf "appstream.enable", containers -> <name>
-  // => folder "containers.<name>". Only the head of a chain may be an option, so no option row disappears.
+// Single children move up into one row: appstream -> enable => leaf "appstream.enable", containers -> <name>
+// => folder "containers.<name>". Only the head of a chain may be an option, so no option row disappears.
+function chainOf(node) {
   const chain = [node];
-  let leafPath = path;
-  for (let n = node; (n === node || !n.option) && Object.keys(n.children).length === 1; ) {
-    n = Object.values(n.children)[0];
-    chain.push(n);
-    leafPath = [...leafPath, n.name];
-  }
+  for (let n = node; (n === node || !n.option) && Object.keys(n.children).length === 1; ) chain.push(n = Object.values(n.children)[0]);
+  return chain;
+}
+// The option a group with a single descendant chain merges into (_module => _module.args), else undefined.
+const loneOption = (node) => { const end = chainOf(node).at(-1); return Object.keys(end.children).length ? undefined : end.option; };
+
+function renderNode(node, path) {
+  const chain = chainOf(node);
+  const leafPath = [...path, ...chain.slice(1).map((n) => n.name)];
   const depth = path.length - 1;
   const label = chain.flatMap((n, j) => [j ? "." : null, name(seg(n.name), depth + j)]);
   if (!Object.keys(chain.at(-1).children).length) {
@@ -308,11 +311,12 @@ function showPath(path) {
   const { chain } = el, end = chain.at(-1);
   const rowPath = [...path.slice(0, path.length - chain.indexOf(node)), ...chain.slice(1).map((n) => n.name)];
   const kids = sortedKids(end);
-  const opts = [...chain, ...kids].map((n) => n.option).filter(Boolean);
+  // Sub-groups holding a single option (_module => _module.args) show that option here instead.
+  const opts = [...chain.map((n) => n.option), ...kids.map((k) => k.option ?? loneOption(k))].filter(Boolean);
   if (!kids.length && opts.length === 1) return show(null, opts);
   const total = countOptions(chain[0]);
   // Then sub-groups with no option of their own (programs.git), as rows too.
-  const groups = kids.filter((k) => !k.option);
+  const groups = kids.filter((k) => !k.option && !loneOption(k));
   const here = [opts.length && `${plural(opts.length, "option")} directly here`, groups.length && plural(groups.length, "group")];
   // The selected row's own options (not its children's) start open.
   show(crumbs(rowPath), opts, `${here.filter(Boolean).join(", ")}; ${total} options in total.`, chain.map((n) => n.option));
