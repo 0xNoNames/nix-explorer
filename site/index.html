@@ -96,10 +96,11 @@
   /* The row padding lives on the summary, so its hover fills the whole row and spans the panel. */
   .info > summary, .group { list-style: none; white-space: normal; margin: 0 -1rem; padding: .75rem 1rem; }
   .info > summary h3, .group h3 { margin: 0; }
-  .group { display: block; color: inherit; text-decoration: none; }
+  .group { cursor: pointer; }
+  .groups { font: .8rem system-ui, sans-serif; opacity: .7; text-transform: uppercase; letter-spacing: .05em; margin: 1.5rem 0 .25rem; }
   .group { opacity: .6; } /* sub-groups recede behind the options */
-  .group:hover, .group:focus-visible { background: #8883; opacity: 1; }
-  .group h3::before { content: "›"; opacity: .6; width: .6em; text-align: center; margin-right: -.4rem; }
+  .group:hover, .group:focus-within { background: #8883; opacity: 1; }
+  .group h3::before { content: "↳"; opacity: .6; width: .6em; text-align: center; margin-right: -.4rem; }
   .info[open] { padding-bottom: .75rem; overflow-wrap: anywhere; } /* long URLs/paths would widen the panel and shift it sideways */
   .info > summary::-webkit-details-marker { display: none; }
   .info > summary h3::before { content: "▸"; opacity: .6; margin-right: -.4rem; }
@@ -267,16 +268,20 @@ function renderNode(node, path) {
   return d;
 }
 
-// Breadcrumb title: every segment links to its node in the tree (plain spans inside a link).
-const crumbs = (path, link = true) => [
-  h(link ? "a" : "span", { className: "source", href: link ? href(path.slice(0, 1)) : undefined }, name(path[0], 0)),
-  ...path.slice(1).flatMap((s, i) => [i ? "." : null, link ? h("a", { href: href(path.slice(0, i + 2)) }, name(seg(s), i + 1)) : name(seg(s), i + 1)]),
+// Breadcrumb title: every segment links to its node in the tree.
+const crumbs = (path) => [
+  h("a", { className: "source", href: href(path.slice(0, 1)) }, name(path[0], 0)),
+  ...path.slice(1).flatMap((s, i) => [i ? "." : null, h("a", { href: href(path.slice(0, i + 2)) }, name(seg(s), i + 1))]),
 ];
 
-// A sub-group as a row like an option's: its path, option count, and a link to it.
+// A sub-group as a row like an option's: its path (each part a link), option count; the rest of the row opens it.
 const plural = (n, w) => `${n} ${w}${n > 1 ? "s" : ""}`;
-const renderGroup = (path, node) => h("article", {}, h("a", { className: "group", href: href(path) },
-  h("h3", {}, h("span", {}, ...crumbs(path, false)), h("span", { className: "desc" }, plural(countOptions(node), "option")))));
+function renderGroup(path, node) {
+  const row = h("div", { className: "group" },
+    h("h3", {}, h("span", {}, ...crumbs(path)), h("span", { className: "desc" }, plural(countOptions(node), "option"))));
+  row.addEventListener("click", (e) => { if (!e.target.closest("a")) location.hash = href(path); });
+  return h("article", {}, row);
+}
 
 // Options in `opened` (or a lone option) start with their details open.
 function show(title, options, note, opened = []) {
@@ -311,7 +316,7 @@ function showPath(path) {
   const here = [opts.length && `${plural(opts.length, "option")} directly here`, groups.length && plural(groups.length, "group")];
   // The selected row's own options (not its children's) start open.
   show(crumbs(rowPath), opts, `${here.filter(Boolean).join(", ")}; ${total} options in total.`, chain.map((n) => n.option));
-  $("detail").append(...groups.map((k) => renderGroup([...rowPath, k.name], k)));
+  if (groups.length) $("detail").append(h("h4", { className: "groups" }, "Groups"), ...groups.map((k) => renderGroup([...rowPath, k.name], k)));
 }
 
 function renderOption(o, open) {
