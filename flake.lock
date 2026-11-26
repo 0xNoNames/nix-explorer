@@ -3,11 +3,11 @@
     "infra": {
       "flake": false,
       "locked": {
-        "lastModified": 1795552642,
-        "narHash": "sha256-5Qxb6wpUSV4qum8einIeIotCV7NmVe5dYsE1QkjVsRI=",
+        "lastModified": 1795686405,
+        "narHash": "sha256-bYPt9dZKAnwhzh0HOuK0o05s1RgA3K/ybgm4HlRzKCU=",
         "owner": "NixOS",
         "repo": "infra",
-        "rev": "71b4a72565ad7332d577fef99537a18eff21cb7f",
+        "rev": "a23917114aeeb71076232b233ab6cf77f18398df",
         "type": "github"
       },
       "original": {
