@@ -285,7 +285,8 @@ function renderNode(node, path) {
   const rev = path.length === 1 && revs[node.name];
   const summary = h("summary", {}, ...label, " ", h("span", { className: "count" }, String(countOptions(node))),
     rev ? h("span", { className: "count", title: rev }, ` @ ${rev.slice(0, 7)}`) : null);
-  summary.addEventListener("click", () => { location.hash = href(leafPath); });
+  summary.hash = href(leafPath); // like a leaf <a>'s, for the vim keys
+  summary.addEventListener("click", () => { location.hash = summary.hash; });
   const d = h("details", { className: `c${(path.length - 1) % 6}`, chain }, summary);
   // Render children on first open; the full tree is tens of thousands of nodes.
   d.renderKids = () => { if (d.childElementCount === 1) d.append(...kids.map((k) => renderNode(k, [...leafPath, k.name]))); };
@@ -305,7 +306,7 @@ const plural = (n, w) => `${n} ${w}${n > 1 ? "s" : ""}`;
 // The nixpkgs source lists packages, in the same tree as options.
 const unit = (source) => (source === "nixpkgs" ? "package" : "option");
 function renderGroup(path, node) {
-  const row = h("div", { className: "group" },
+  const row = h("div", { className: "group", tabIndex: -1 }, // focusable by the vim keys
     h("h3", {}, h("span", {}, ...crumbs(path)), h("span", { className: "desc" }, plural(countOptions(node), unit(path[0])))));
   row.addEventListener("click", (e) => { if (!e.target.closest("a")) location.hash = href(path); });
   return h("article", {}, row);
@@ -331,6 +332,7 @@ function show(title, options, note, opened = [], hits) {
   const chunks = [];
   for (let i = 0; i < options.length; i += CHUNK) {
     const c = h("div", { className: "chunk", items: options.slice(i, i + CHUNK) });
+    c.fill = () => c.childElementCount || fill(c); // the vim keys render a chunk before moving into it
     c.style.height = `${c.items.length * ROW}px`;
     chunks.push(c);
   }
@@ -503,7 +505,8 @@ function accept(s) {
 $("search").addEventListener("input", () => { suggest(); search(); });
 $("search").addEventListener("blur", () => { picks = []; renderSuggest(); });
 $("search").addEventListener("keydown", (e) => {
-  if (!picks.length) return;
+  // Enter with no suggestions open: on to the first result, where the vim keys take over.
+  if (!picks.length) return e.key === "Enter" && $("search").value.trim() && (e.preventDefault(), detailRows()[0]?.focus());
   if (e.key === "ArrowDown" || e.key === "ArrowUp") active = (active + (e.key === "ArrowDown" ? 1 : picks.length - 1)) % picks.length;
   else if (e.key === "Enter" || e.key === "Tab") return e.preventDefault(), accept(picks[active]);
   else if (e.key === "Escape") picks = [];
@@ -516,12 +519,94 @@ $("clear").addEventListener("click", () => { $("search").value = ""; search(); $
 // query first, keeping its @source filters for the next one ("@nixpkgs ripgrep" -> "@nixpkgs "), then those.
 addEventListener("keydown", (e) => {
   const value = $("search").value;
-  if (e.key !== "Escape" || e.defaultPrevented || !value) return;
+  if (e.key !== "Escape" || e.defaultPrevented) return;
+  if (!value) return e.target === $("search") && current?.focus(); // empty box: back to the tree selection
   e.preventDefault(); // or Chrome's own Escape on type=search clears it a second time
   const filters = value.split(/\s+/).filter((w) => w.startsWith("@")).join(" ");
   $("search").value = filters && filters !== value.trim() ? filters + " " : "";
   search();
 });
+// Vim keys, not while typing in a field. Tree: j/k next/previous visible row, l open (or first child), h close (or
+// parent), gg/G first/last row; moves select through location.replace, so no history entry per keystroke. Tab from a
+// tree row goes to the detail panel and back: there j/k move between entries, l/h open/close one (l enters a group).
+const treeRows = () => [...$("tree").querySelectorAll("summary, a.leaf")].filter((r) => r.checkVisibility());
+const ROWS = "article > details > summary, article > .group";
+const detailRows = () => [...$("detail").querySelectorAll(ROWS)];
+let gAt = 0, lastDetail; // time of a first "g"; the detail row Tab returns to
+$("detail").addEventListener("focusin", (e) => { if (e.target.matches(ROWS)) lastDetail = e.target; });
+// The detail row to enter the panel on: the last one used, if still shown, else the first.
+const detailEntry = () => (lastDetail?.isConnected ? lastDetail : detailRows()[0]);
+function treeKey(key, rows) {
+  const cur = rows.includes(current) ? current : null, i = rows.indexOf(cur);
+  const folder = cur?.tagName === "SUMMARY" ? cur.parentElement : null;
+  if (key === "j" || key === "k") return rows[cur ? i + (key === "j" ? 1 : -1) : 0];
+  if (key === "l" && !folder) return detailEntry(); // nothing to open: on to the detail panel
+  if (key === "l") {
+    if (!folder.open) { folder.open = true; return cur; }
+    const kid = folder.children[1]; // after the summary: the first child row
+    return kid?.tagName === "DETAILS" ? kid.firstChild : kid;
+  }
+  if (key === "h") {
+    if (folder?.open) { folder.open = false; return cur; }
+    return (folder ?? cur)?.parentElement.closest("details")?.firstChild;
+  }
+}
+// cur: the focused entry's row; link: the element focused inside its details instead (its source link), if any.
+function detailKey(key, cur, link) {
+  // Render the chunk being moved into if it's empty (not reached yet, or culled).
+  if (key === "j") cur?.closest(".chunk")?.nextElementSibling?.fill?.();
+  if (key === "k") cur?.closest(".chunk")?.previousElementSibling?.fill?.();
+  const rows = detailRows(), i = rows.indexOf(cur);
+  if (key === "j" || key === "k") return rows[i < 0 ? 0 : i + (key === "j" ? 1 : -1)];
+  const entry = cur?.parentElement.tagName === "DETAILS" ? cur.parentElement : null;
+  if (key === "l") {
+    if (!entry) return cur?.click(); // a group row opens the group
+    if (entry.open) return link ?? entry.querySelector('dd a[href^="source.html"]') ?? cur; // open: on to its source
+    entry.open = true;
+  }
+  if (key === "h") {
+    if (link) return cur; // back to the heading, still open
+    if (!entry?.open) return current; // nothing to close: back to the tree
+    entry.open = false;
+  }
+  return cur;
+}
+addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("input, textarea, select, [contenteditable]")) return;
+  // In the detail panel: on an entry's row, or inside its details (the source link l moves to).
+  const active = document.activeElement;
+  const row = !$("detail").contains(active) ? null
+    : active.matches(ROWS) ? active : active.closest("article")?.querySelector(`:scope > details > summary`) ?? null;
+  const inDetail = !!row, link = row && row !== active ? active : null;
+  if (e.key === "Tab" && !e.shiftKey) { // Shift+Tab stays the browser's
+    const to = inDetail ? current : active?.closest?.("#tree") && detailEntry();
+    if (to) { e.preventDefault(); to.focus(); }
+    return;
+  }
+  if (e.key === "Enter" && !link && row?.classList.contains("group")) return row.click();
+  let key = e.key;
+  if (key === "g") { if (performance.now() - gAt > 500) { gAt = performance.now(); return; } gAt = 0; key = "gg"; }
+  if (!["j", "k", "h", "l", "gg", "G"].includes(key)) return;
+  e.preventDefault();
+  if (inDetail) {
+    let to;
+    if (key === "gg") { // the first and last chunks may be empty (culled): render them
+      $("detail").querySelector(".chunk")?.fill?.();
+      to = detailRows()[0];
+    } else if (key === "G") {
+      [...$("detail").querySelectorAll(".chunk")].at(-1)?.fill?.();
+      to = detailRows().at(-1);
+    } else to = detailKey(key, row, link);
+    return to?.focus();
+  }
+  const rows = treeRows();
+  const to = key === "gg" ? rows[0] : key === "G" ? rows.at(-1) : treeKey(key, rows);
+  if (!to) return;
+  if ($("detail").contains(to)) return to.focus(); // l went on to the detail panel
+  to.focus({ preventScroll: true });
+  if (to !== current) location.replace(to.hash); // selects and shows it (hashchange -> route)
+});
+
 // "/" focuses the search (as on GitHub), unless typing in a field; selecting the text lets a new query replace it.
 addEventListener("keydown", (e) => {
   if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("input, textarea, select, [contenteditable]")) return;
