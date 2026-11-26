@@ -57,6 +57,73 @@ export function preprocessMd(text, source) {
       `> **${kind[0].toUpperCase() + kind.slice(1)}**\n>\n` + body.trimEnd().replace(/^/gm, "> "));
 }
 
+// Whether every query word (lowercase) fuzzily matches inside one word of text (any case): a subsequence that
+// doesn't cross a space or punctuation. Scattered letters across a long description would match almost anything.
+// No lowercased copy of the text: descriptions total tens of MB.
+export function wordsMatch(words, text) {
+  return words.every((w) => {
+    for (let i = 0, j = 0; i < text.length; i++) {
+      let c = text.charCodeAt(i);
+      if (c >= 65 && c <= 90) c += 32;
+      if (c === w.charCodeAt(j)) { if (++j === w.length) return true; }
+      else if (!((c >= 97 && c <= 122) || (c >= 48 && c <= 57))) j = 0; // a word boundary: start over
+    }
+    return false;
+  });
+}
+
+// What a search hit matched, from its ranker score: the name (words or fuzzy) or the description.
+// Tiers (see ranker): 4 name has every word, 3 description has every word, 2 fuzzy name, 1 fuzzy description.
+const tierOf = (score) => Math.floor(score / 1e6);
+export const matchedName = (score) => tierOf(score) % 2 === 0;
+export const fuzzyName = (score) => tierOf(score) === 2;
+
+// Character positions (into s, lowercase) of the greedy subsequence match of q that fuzzyScore scores, or [].
+export function fuzzyPositions(q, s) {
+  const pos = [];
+  for (let i = 0; i < s.length && pos.length < q.length; i++) if (s[i] === q[pos.length]) pos.push(i);
+  return pos.length === q.length ? pos : [];
+}
+
+// Character positions in text (any case) matching the query words: every literal occurrence of a word, else its
+// first fuzzy match inside one word (as wordsMatch finds it).
+export function wordPositions(words, text) {
+  const lower = text.toLowerCase(), pos = [];
+  for (const w of words) {
+    let found = false;
+    for (let i = lower.indexOf(w); i >= 0; i = lower.indexOf(w, i + w.length)) {
+      found = true;
+      for (let k = 0; k < w.length; k++) pos.push(i + k);
+    }
+    if (found) continue;
+    const run = [];
+    for (let i = 0; i < lower.length && run.length < w.length; i++) {
+      const c = lower[i];
+      if (c === w[run.length]) run.push(i);
+      else if (!/[a-z0-9]/.test(c)) run.length = 0; // a word boundary: start over
+    }
+    if (run.length === w.length) pos.push(...run);
+  }
+  return pos;
+}
+
+// Search ranking for a query (q: lowercase, no spaces; words: lowercase) as a function of an entry's lowercased
+// name and its description, returning a score (higher first) or -1. Tiers: names containing every word, then
+// descriptions containing every word (any case), then fuzzy name matches, then descriptions where each word
+// fuzzily matches inside one word. Shorter names first among description hits.
+export function ranker(q, words) {
+  const res = words.map((w) => new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+  const tier = (t, s) => t * 1e6 + s; // fuzzy scores stay far below 1e6
+  return (key, desc) => {
+    const n = fuzzyScore(q, key);
+    if (n >= 0 && words.every((w) => key.includes(w))) return tier(4, n);
+    if (desc && res.every((r) => r.test(desc))) return tier(3, 1e5 - key.length);
+    if (n >= 0) return tier(2, n);
+    if (desc && wordsMatch(words, desc)) return tier(1, 1e5 - key.length);
+    return -1;
+  };
+}
+
 // fzf-style subsequence match; -1 if no match. Rewards consecutive runs, matches at
 // segment starts, exact substrings and short names. Inputs must be lowercased.
 export function fuzzyScore(q, s) {
@@ -74,11 +141,12 @@ export function fuzzyScore(q, s) {
 // (`@nixos`, `@home`, `@d`; several = any of them). sources is null when none is given.
 export function parseSearch(value, sources) {
   let picks = null; // a bare "@" (still typing) filters nothing; an unknown @word matches nothing
-  const q = value.toLowerCase().replace(/@(\S*)/g, (_, p) => {
+  const rest = value.toLowerCase().replace(/@(\S*)/g, (_, p) => {
     if (p) (picks ??= []).push(...sources.filter((s) => s.startsWith(p)));
     return "";
-  }).replace(/\s+/g, "");
-  return { q, sources: picks };
+  });
+  // q (names: no spaces) and words (descriptions, matched one by one).
+  return { q: rest.replace(/\s+/g, ""), words: rest.split(/\s+/).filter(Boolean), sources: picks };
 }
 
 // Sources an "@prefix" being typed at the end of the text could be ([] once it's complete).

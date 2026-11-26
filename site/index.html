@@ -41,6 +41,7 @@
   .repo { display: flex; color: inherit; opacity: .7; }
   .repo:hover, .repo:focus-visible { opacity: 1; }
   button.repo { background: none; border: 0; padding: 0; cursor: pointer; }
+  mark { background: light-dark(#fde68a, #5c4a12); color: inherit; border-radius: 2px; } /* search matches */
   .chunk { display: flow-root; } /* contains its rows' margins, so a culled chunk's measured height is exact */
   .clear { font-size: .8rem; font-weight: normal; margin-left: .5rem; text-decoration: underline; } /* h2 links are plain otherwise */
   /* --tree is set by dragging the divider. */
@@ -132,7 +133,7 @@
 <body>
 <header>
   <label class="channel">Channel <select id="channel"></select></label>
-  <span class="searchbox"><input id="search" type="search" placeholder="Fuzzy search options and packages… (@nixos @home @darwin @nixpkgs)" aria-label="Fuzzy search options and packages" role="combobox" aria-autocomplete="list" aria-controls="suggest" aria-expanded="false" autocomplete="off"><button id="clear" type="button" title="Clear search" aria-label="Clear search"><svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg></button><ul id="suggest" role="listbox" aria-label="Sources" hidden></ul></span>
+  <span class="searchbox"><input id="search" type="search" placeholder="Search… @nixos @home @darwin @nixpkgs" aria-label="Fuzzy search names and descriptions of options and packages" aria-keyshortcuts="/" title="Search (/)" role="combobox" aria-autocomplete="list" aria-controls="suggest" aria-expanded="false" autocomplete="off"><button id="clear" type="button" title="Clear search" aria-label="Clear search"><svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg></button><ul id="suggest" role="listbox" aria-label="Sources" hidden></ul></span>
   <!-- Inline SVG: the icon itself makes no request (offline site); only clicking leaves it. -->
   <div class="end">
   <button id="theme" class="repo" type="button" title="Toggle dark/light theme" aria-label="Toggle dark/light theme"><svg id="sun" width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06"/></svg><svg id="moon" width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6.2 1.2a6.5 6.5 0 1 0 8.6 8.6A5.5 5.5 0 0 1 6.2 1.2z"/></svg></button>
@@ -146,7 +147,7 @@
 </main>
 <script type="module">
 import { marked } from "./marked.js";
-import { buildTree, countOptions, esc, fuzzyScore, nixHTML, optionName, optionPath, parseSearch, preprocessMd, sourceSuggestions } from "./lib.js";
+import { buildTree, countOptions, esc, fuzzyName, fuzzyPositions, matchedName, ranker, wordPositions, nixHTML, optionName, optionPath, parseSearch, preprocessMd, sourceSuggestions } from "./lib.js";
 
 const SOURCES = ["nixos", "home-manager", "darwin", "nixpkgs"];
 const $ = (id) => document.getElementById(id);
@@ -315,13 +316,14 @@ function renderGroup(path, node) {
 const CHUNK = 50, ROW = 40; // ROW: a collapsed row's height in px, the guess for chunks not rendered yet
 let lister; // the shown list's IntersectionObserver
 // Options in `opened` (or a lone option) start with their details open; toggles are remembered across culling.
-function show(title, options, note, opened = []) {
+// hits (search results): { q, words, scores: Map(option -> ranker score) }, for highlighting.
+function show(title, options, note, opened = [], hits) {
   lister?.disconnect();
   const open = new Set(options.length === 1 ? options : opened);
   const fill = (c) => {
     c.style.height = "";
     c.append(...c.items.map((o) => {
-      const a = renderOption(o, open.has(o));
+      const a = renderOption(o, open.has(o), hits && { q: hits.q, words: hits.words, score: hits.scores.get(o) });
       a.firstChild.addEventListener("toggle", (e) => (e.target.open ? open.add(o) : open.delete(o)));
       return a;
     }));
@@ -376,12 +378,42 @@ function showPath(path) {
   if (groups.length) $("detail").append(h("h4", { className: "groups" }, "Groups"), ...groups.map((k) => renderGroup([...rowPath, k.name], k)));
 }
 
-function renderOption(o, open) {
+// Wraps the characters at `positions` (into el's text, minus `offset`) in <mark>, text node by text node.
+function mark(el, positions, offset = 0) {
+  if (!positions.length) return;
+  const at = new Set(positions.map((p) => p + offset));
+  const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), nodes = [];
+  while (walk.nextNode()) nodes.push(walk.currentNode);
+  let base = 0;
+  for (const node of nodes) {
+    const t = node.data, parts = [];
+    for (let i = 0, start = 0; i <= t.length; i++) {
+      if (i < t.length && at.has(base + i) === at.has(base + start)) continue;
+      const run = t.slice(start, i);
+      parts.push(at.has(base + start) ? h("mark", {}, run) : run);
+      start = i;
+    }
+    base += t.length;
+    if (parts.some((p) => typeof p !== "string")) node.replaceWith(...parts);
+  }
+}
+
+// hit (search results only): { q, words, score }, to highlight what matched, the name or the description.
+function renderOption(o, open, hit) {
   const row = (k, v) => (v == null ? [] : [h("dt", {}, k), h("dd", {}, v)]);
   const desc = o.description ? md(o.description, o.source) : null;
+  const title = h("span", {}, ...crumbs([o.source, ...o.loc]));
+  const preview = desc ? h("span", { className: "desc" }, desc.textContent) : null;
+  if (hit && matchedName(hit.score)) {
+    const name = title.textContent.slice(o.source.length).toLowerCase(); // the crumbs after the source name
+    mark(title, fuzzyName(hit.score) ? fuzzyPositions(hit.q, name) : wordPositions(hit.words, name), o.source.length);
+  } else if (hit && desc) {
+    mark(preview, wordPositions(hit.words, preview.textContent));
+    mark(desc, wordPositions(hit.words, desc.textContent));
+  }
   return h("article", {},
     h("details", { className: "info", open }, h("summary", {},
-      h("h3", {}, h("span", {}, ...crumbs([o.source, ...o.loc])), desc ? h("span", { className: "desc" }, desc.textContent) : null)),
+      h("h3", {}, title, preview)),
       desc, h("dl", {},
       ...row("Usage", o.modular ? nixCode(modularUsage(o)) : o.source === "nixpkgs" ? h("pre", {}, h("code", { innerHTML: packageUsage(o) })) : null),
       ...row("Type", o.type),
@@ -405,21 +437,23 @@ let beforeSearch = ""; // hash to restore when the search is cleared
 const setHash = (hash) => history.replaceState(null, "", location.pathname + location.search + hash);
 function search() {
   const value = $("search").value.trim();
-  const { q, sources } = parseSearch(value, SOURCES);
+  const { q, words, sources } = parseSearch(value, SOURCES);
   const searching = location.hash.startsWith("#search=");
   if (!q) { if (searching) setHash(beforeSearch); return route(); } // cleared: back to what the URL showed
   if (!searching) beforeSearch = location.hash;
   setHash(`#search=${encodeURI(value)}`);
+  const rank = ranker(q, words); // names and descriptions
   const hits = [];
   for (const o of allOptions) {
     if (sources && !sources.includes(o.source)) continue;
-    const s = fuzzyScore(q, o.key); if (s >= 0) hits.push([s, o]);
+    const s = rank(o.key, o.description); if (s >= 0) hits.push([s, o]);
   }
   hits.sort((a, b) => b[0] - a[0]);
   const clear = h("a", { href: "", className: "clear" }, "clear");
   clear.addEventListener("click", (e) => { e.preventDefault(); $("search").value = ""; search(); });
-  show([`Results for “${q}” (${hits.length > 200 ? `top 200 of ${hits.length}` : hits.length})`, clear],
-    hits.slice(0, 200).map((x) => x[1]));
+  const top = hits.slice(0, 200);
+  show([`Results for “${words.join(" ")}” (${hits.length > 200 ? `top 200 of ${hits.length}` : hits.length})`, clear],
+    top.map((x) => x[1]), null, [], { q, words, scores: new Map(top.map(([s, o]) => [o, s])) });
 }
 
 // Hash: "#<source>", "#<source>:<dotted option or group name>" or "#search=<query>".
@@ -478,6 +512,23 @@ $("search").addEventListener("keydown", (e) => {
   renderSuggest();
 });
 $("clear").addEventListener("click", () => { $("search").value = ""; search(); $("search").focus(); });
+// Escape clears the search from anywhere, unless it just closed the @source suggestions (keydown above): the
+// query first, keeping its @source filters for the next one ("@nixpkgs ripgrep" -> "@nixpkgs "), then those.
+addEventListener("keydown", (e) => {
+  const value = $("search").value;
+  if (e.key !== "Escape" || e.defaultPrevented || !value) return;
+  e.preventDefault(); // or Chrome's own Escape on type=search clears it a second time
+  const filters = value.split(/\s+/).filter((w) => w.startsWith("@")).join(" ");
+  $("search").value = filters && filters !== value.trim() ? filters + " " : "";
+  search();
+});
+// "/" focuses the search (as on GitHub), unless typing in a field; selecting the text lets a new query replace it.
+addEventListener("keydown", (e) => {
+  if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("input, textarea, select, [contenteditable]")) return;
+  e.preventDefault(); // not typed into the box, nor Firefox's quick find
+  $("search").focus();
+  $("search").select();
+});
 
 // Theme: the head script applies the saved choice on both pages (none saved = follow the system).
 // The button shows the theme a click switches to (moon in light mode, sun in dark) and saves it.

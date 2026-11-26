@@ -2,7 +2,7 @@
 
 A static, offline-friendly explorer for **NixOS**, **home-manager** and **nix-darwin** module options, and **nixpkgs** packages.
 
-Browse every option as a tree (`nixos/services/nginx/…`), fuzzy-search across ~33k options, read the rendered docs, and jump straight to the declaration in the bundled Nix source, across every NixOS channel, including unmaintained ones.
+Browse every option as a tree (`nixos/services/nginx/…`), fuzzy-search names and descriptions of ~33k options and ~150k packages, read the rendered docs, and jump straight to the declaration in the bundled Nix source, across every NixOS channel, including unmaintained ones.
 
 > **Note:** this website is vibecoded with a human reviewing and steering.
 
@@ -11,7 +11,8 @@ Browse every option as a tree (`nixos/services/nginx/…`), fuzzy-search across 
 - **All three module systems**: NixOS, home-manager and nix-darwin, for each channel (unstable plus every primary release).
 - **Every nixpkgs package** (~120k), with version, license and description, linked to the line that defines it.
 - **Self-contained**: no request leaves the site. JS is vendored, sources are bundled and there are no external links, so it runs in air-gapped or isolated environments.
-- **Tree + fuzzy search** with readable, shareable URLs, e.g. `?26.05#nixos:services.nginx.virtualHosts.<name>.forceSSL`.
+- **Keyboard**: `/` to search, Escape to clear it.
+- **Tree + fuzzy search** over names and descriptions, with readable, shareable URLs, e.g. `?26.05#nixos:services.nginx.virtualHosts.<name>.forceSSL`.
 - **Rendered docs**: the nixpkgs Markdown dialect, with `{option}` cross-links and Nix syntax highlighting.
 - **Jump to source**: opens the declaring file at the option's line range, following imports for submodule options.
 - **No JS build step**: everything is built with a Nix flake. The only third-party JS is a pinned `marked`. HTML, JS, CSS and SVG are minified at build time with `minify` from nixpkgs.

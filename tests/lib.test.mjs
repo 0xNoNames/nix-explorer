@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MODULAR_ROOT, buildTree, countOptions, findOptionLines, fuzzyScore, nixImports, nixTokens, normalizeDecl, optionName, optionPath, parseSearch, preprocessMd, sourceSuggestions } from "../site/lib.js";
+import { MODULAR_ROOT, buildTree, countOptions, findOptionLines, fuzzyName, fuzzyPositions, fuzzyScore, matchedName, ranker, wordPositions, wordsMatch, nixImports, nixTokens, normalizeDecl, optionName, optionPath, parseSearch, preprocessMd, sourceSuggestions } from "../site/lib.js";
 
 test("normalizeDecl handles both declaration formats", () => {
   assert.equal(normalizeDecl("nixos/modules/a.nix"), "nixpkgs/nixos/modules/a.nix");
@@ -59,6 +59,40 @@ test("preprocessMd converts nixpkgs roles and admonitions", () => {
   assert.equal(preprocessMd("See {option}`a.b` and {file}`/etc/x`.", "nixos"), "See [`a.b`](#nixos:a.b) and `/etc/x`.");
   assert.equal(preprocessMd("Hi\n\n::: {.warning}\nBe careful.\nReally.\n:::\n"),
     "Hi\n\n> **Warning**\n>\n> Be careful.\n> Really.\n");
+});
+
+test("wordsMatch matches each query word fuzzily inside a single word, any case", () => {
+  const d = "Utility that combines the usability of The Silver Searcher with the raw speed of grep";
+  assert.ok(wordsMatch(["silvr"], d)); // subsequence of "Silver"
+  assert.ok(wordsMatch(["speed", "grep"], d));
+  assert.ok(!wordsMatch(["usgrep"], d)); // letters spread over several words don't count
+  assert.ok(!wordsMatch(["speed", "awk"], d)); // every word must match
+  assert.ok(wordsMatch(["nix-shell"], "Run it with nix-shell -p")); // punctuation in the query matches itself
+  assert.ok(!wordsMatch(["x"], ""));
+});
+
+test("ranker puts names with every word, then descriptions with every word, then fuzzy matches", () => {
+  const rank = ranker("fastgrep", ["fast", "grep"]);
+  const named = rank("fastgrep", "");
+  const described = rank("ripgrep", "A fast line-oriented search tool, like GREP");
+  const fuzzyName = rank("rpackages.fastlogisticregressionwrap", "");
+  const fuzzyDesc = rank("foo", "Fanciest goodreps"); // f-a-s-t in "Fanciest", g-r-e-p in "goodreps"
+  assert.ok(named > described && described > fuzzyName && fuzzyName > fuzzyDesc && fuzzyDesc > -1);
+  assert.equal(rank("nothing", "here"), -1);
+  assert.ok(ranker("a.b", ["a.b"])("x", "a.b") > ranker("a.b", ["a.b"])("x", "axb")); // words are literal, not regexps
+});
+
+test("match positions for highlighting follow the ranker's tiers", () => {
+  assert.deepEqual(fuzzyPositions("ngen", "services.nginx.enable"), [9, 10, 15, 16]);
+  assert.deepEqual(fuzzyPositions("xyz", "services.nginx.enable"), []);
+  assert.deepEqual(wordPositions(["grep"], "Grep, then grep"), [0, 1, 2, 3, 11, 12, 13, 14]); // every occurrence, any case
+  assert.deepEqual(wordPositions(["fst"], "a fast tool"), [2, 4, 5]); // fuzzy inside one word
+  assert.deepEqual(wordPositions(["fst"], "f s t"), []); // not across words
+  const rank = ranker("fastgrep", ["fast", "grep"]);
+  assert.ok(matchedName(rank("fastgrep", "")) && !fuzzyName(rank("fastgrep", "")));
+  assert.ok(!matchedName(rank("ripgrep", "fast grep")));
+  assert.ok(fuzzyName(rank("rpackages.fastlogisticregressionwrap", "")));
+  assert.ok(!matchedName(rank("foo", "Fanciest goodreps")));
 });
 
 test("fuzzyScore matches subsequences and ranks tighter matches higher", () => {
@@ -187,11 +221,11 @@ test("optionName/optionPath round-trip dotted, quoted and placeholder segments",
 
 test("parseSearch pulls @source filters out of the query", () => {
   const S = ["nixos", "home-manager", "darwin"];
-  assert.deepEqual(parseSearch("Nginx enable", S), { q: "nginxenable", sources: null });
-  assert.deepEqual(parseSearch("@nixos nginx", S), { q: "nginx", sources: ["nixos"] });
-  assert.deepEqual(parseSearch("git @home @d", S), { q: "git", sources: ["home-manager", "darwin"] });
-  assert.deepEqual(parseSearch("git @", S), { q: "git", sources: null });
-  assert.deepEqual(parseSearch("git @nope", S), { q: "git", sources: [] });
+  assert.deepEqual(parseSearch("Nginx enable", S), { q: "nginxenable", words: ["nginx", "enable"], sources: null });
+  assert.deepEqual(parseSearch("@nixos nginx", S), { q: "nginx", words: ["nginx"], sources: ["nixos"] });
+  assert.deepEqual(parseSearch("git @home @d", S), { q: "git", words: ["git"], sources: ["home-manager", "darwin"] });
+  assert.deepEqual(parseSearch("git @", S), { q: "git", words: ["git"], sources: null });
+  assert.deepEqual(parseSearch("git @nope", S), { q: "git", words: ["git"], sources: [] });
 });
 
 test("sourceSuggestions lists sources for the @prefix being typed", () => {
