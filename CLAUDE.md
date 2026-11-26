@@ -26,7 +26,7 @@ The flake only sees git-tracked files: `git add` (or `git add -N`) new files bef
   - pins each branch with `git ls-remote` + `nix flake prefetch` (rev + narHash). It checks all three branches exist before prefetching, and reuses the narHash of a rev already in the lock, so only moved branches are downloaded.
   - skips a channel whose home-manager or nix-darwin branch doesn't exist yet, which happens right after a NixOS release.
 
-  The flake fetches the pins with `builtins.fetchTree`, so eval stays pure. Lock order is UI order: unstable, then newest release first.
+  The flake fetches the pins with `builtins.fetchTree` (shallow `git`, not the GitHub tarball API; same narHash), so eval stays pure. Lock order is UI order: unstable, then newest release first.
 
 - **Site layout** (`result/`): `index.html`, `source.html`, `lib.js`, `nix.css`, `favicon.svg`, `marked.js`, `data/channels.json` (the repo's `channels.json` as-is, whose pinned revs are shown next to each source in the tree, plus per source `sizes` (data file bytes, for the loading percentage)), `data/<channel>/{nixos,home-manager,darwin,nixpkgs}.json`, `src/<channel>/<repo>/<path>.nix`.
 - **Bundled sources**: `channelSources` in `flake.nix` lists every declaring file plus their relative imports up to `IMPORT_DEPTH` (read from `lib.js`), using jq + grep so the build needs no node. Its jq copies of `normalizeDecl` and `nixImports` must stay in sync with `lib.js`; its grep also matches paths in comments and strings, which only bundles a few extra files. It then copies each one from the channel's nixpkgs/home-manager/nix-darwin input into `src/<channel>/`. That is about 3.2k files and 25 MB per channel. Missing declaring files are warnings, not errors: watch the build log.

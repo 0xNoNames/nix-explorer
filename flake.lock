@@ -5,31 +5,33 @@
       "locked": {
         "lastModified": 1795686405,
         "narHash": "sha256-bYPt9dZKAnwhzh0HOuK0o05s1RgA3K/ybgm4HlRzKCU=",
-        "owner": "NixOS",
-        "repo": "infra",
+        "ref": "refs/heads/main",
         "rev": "a23917114aeeb71076232b233ab6cf77f18398df",
-        "type": "github"
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/NixOS/infra"
       },
       "original": {
-        "owner": "NixOS",
-        "repo": "infra",
-        "type": "github"
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/NixOS/infra"
       }
     },
     "nixpkgs": {
       "locked": {
         "lastModified": 1794386569,
         "narHash": "sha256-x9sADJvoVG0L6RejZB+/BB4YiGZFBZrfTlhF4uBq1tQ=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
+        "ref": "nixos-unstable",
         "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
-        "type": "github"
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/NixOS/nixpkgs"
       },
       "original": {
-        "owner": "NixOS",
         "ref": "nixos-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/NixOS/nixpkgs"
       }
     },
     "root": {

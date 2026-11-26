@@ -4,9 +4,9 @@
   # Build tooling, plus NixOS/infra for its list of channels. The documented channels themselves are
   # pinned in channels.json (flake inputs can't be generated from data): refresh them with
   # `nix flake update && nix run .#update-channels`.
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs.nixpkgs.url = "git+https://github.com/NixOS/nixpkgs?ref=nixos-unstable&shallow=1";
   inputs.infra = {
-    url = "github:NixOS/infra";
+    url = "git+https://github.com/NixOS/infra?shallow=1";
     flake = false;
   };
 
@@ -24,7 +24,8 @@
 
       # Primary channels from NixOS/infra's channels.nix, pinned by the update-channels app.
       # The UI defaults to the first "stable" entry, else the first. Fetches are locked (rev + narHash), so eval stays pure.
-      fetch = s: builtins.fetchTree { type = "github"; inherit (s) owner repo rev narHash; };
+      # Plain git (shallow), not GitHub's tarball API; the tree, and so the narHash, is the same.
+      fetch = s: builtins.fetchTree { type = "git"; url = "https://github.com/${s.owner}/${s.repo}"; shallow = true; inherit (s) rev narHash; };
       channels = map (
         c:
         assert builtins.match "nixos-(unstable|[0-9]{2}\\.[0-9]{2})" c.name != null;
@@ -236,7 +237,7 @@
                 pin() {
                   local hash=""
                   [ -f "$out" ] && hash=$(jq -r --arg rev "$4" 'first(.[] | .nixpkgs, ."home-manager", ."nix-darwin" | select(.rev == $rev) | .narHash) // empty' "$out")
-                  [ -n "$hash" ] || hash=$(nix flake prefetch --json "github:$1/$2/$4" | jq -r .hash)
+                  [ -n "$hash" ] || hash=$(nix flake prefetch --json "git+https://github.com/$1/$2?rev=$4&shallow=1" | jq -r .hash)
                   [[ $hash == sha256-* ]] || { echo "  no narHash for $1/$2 $4" >&2; return 1; }
                   jq -n --arg owner "$1" --arg repo "$2" --arg branch "$3" --arg rev "$4" --arg narHash "$hash" \
                     '{$owner, $repo, $branch, $rev, $narHash}'
