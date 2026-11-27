@@ -13,15 +13,15 @@
       "owner": "nix-community",
       "repo": "home-manager",
       "branch": "master",
-      "rev": "361da94fb55c67094ec47322d2757d6616a0de92",
-      "narHash": "sha256-GUY/RHSSnAJKKI3xk7xrSXrsXFgIOgFrRJOD4uub5J8="
+      "rev": "54f903fdaaf5d5720ed36706fe75332af69eb793",
+      "narHash": "sha256-J1iQ1QMnkFwZFXnlPt2t3Qx7TsGjw08/0L3QMqNt+Wg="
     },
     "nix-darwin": {
       "owner": "nix-darwin",
       "repo": "nix-darwin",
       "branch": "master",
-      "rev": "663d8b962a11cda261b6e9f14e03911fac94baf0",
-      "narHash": "sha256-Gd1+Oaj8nS+p1qLpKk4MGv/qGh62+lTkX4262e2UDgc="
+      "rev": "594c680c429be020d7130cc2b17d43c4760d17c7",
+      "narHash": "sha256-VTPsIOYem/zQCO1QF3cpa4pLg2EoexjX5R1u3fs3L4k="
     }
   },
   {
